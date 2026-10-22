@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: mockups</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #07080b;
+    --fg: #f2f3f5;
+    --dim: rgba(242, 243, 245, .62);
+    --faint: rgba(242, 243, 245, .38);
+    --focus: #ffffff;
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #1b1d22; color: var(--fg); font-family: var(--font); }
+
+  /* Page chrome around the TV */
+  .chrome { display: flex; align-items: center; gap: 12px; padding: 14px 20px; font-size: 14px; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 12px 0 0; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .keys { margin-left: auto; color: var(--dim); }
+  kbd { background: #2a2d34; border-radius: 4px; padding: 2px 6px; font-family: inherit; font-size: 12px; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .notes { width: 320px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+  .notes .src { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  /* The TV itself: designed at 1920x1080 and scaled to fit */
+  .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: var(--bg); overflow: hidden; }
+  .layout { position: absolute; inset: 0; display: none; }
+  .layout.active { display: block; }
+
+  .topbar { position: absolute; top: 44px; right: 72px; display: flex; align-items: center; gap: 18px; z-index: 5; font-size: 26px; }
+  .pill { padding: 10px 20px; border-radius: 999px; background: rgba(255,255,255,.10); font-size: 22px; color: var(--dim); }
+  .pill.focusable.focused { background: var(--focus); color: #111; }
+  .clock { font-weight: 600; font-size: 34px; letter-spacing: .5px; }
+
+  /* Generated key art: no real images, just a palette and the title */
+  .art { position: relative; overflow: hidden; border-radius: 14px; background: #222; }
+  .art::after { content: ""; position: absolute; inset: 0; background:
+      radial-gradient(120% 90% at 85% 10%, rgba(255,255,255,.18), transparent 55%),
+      linear-gradient(180deg, transparent 45%, rgba(0,0,0,.55)); }
+  .art .mark { position: absolute; left: 6%; bottom: 16%; right: 6%; z-index: 1; font-weight: 800; letter-spacing: -.5px; line-height: .95; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
+
+  .focusable { transition: transform .16s ease, box-shadow .16s ease, outline-color .16s; outline: 4px solid transparent; outline-offset: 4px; }
+  .card.focused, .app.focused, .tile.focused { transform: scale(1.06); outline-color: var(--focus); box-shadow: 0 24px 50px rgba(0,0,0,.6); z-index: 3; }
+
+  .badge { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+  .badge i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); overflow: hidden; }
+  .progress b { display: block; height: 100%; background: #fff; }
+
+  /* Hero (layouts A and B) */
+  .hero-bg { position: absolute; inset: 0; transition: background .35s ease; }
+  .hero-bg::after { content: ""; position: absolute; inset: 0; background:
+      linear-gradient(90deg, rgba(7,8,11,.96) 0%, rgba(7,8,11,.75) 35%, rgba(7,8,11,.1) 70%),
+      linear-gradient(0deg, var(--bg) 0%, transparent 45%); }
+  .hero-bg .mark { position: absolute; right: 7%; top: 16%; font-size: 150px; font-weight: 800; opacity: .18; letter-spacing: -4px; text-align: right; max-width: 55%; line-height: .9; }
+  .hero { position: absolute; left: 96px; z-index: 2; max-width: 860px; }
+  .hero h2 { font-size: 84px; line-height: 1; margin: 18px 0 16px; letter-spacing: -1.5px; }
+  .hero .meta { font-size: 26px; color: var(--dim); margin-bottom: 18px; }
+  .hero .desc { font-size: 26px; line-height: 1.4; color: var(--dim); margin: 0 0 26px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hero .actions { display: flex; align-items: center; gap: 24px; font-size: 24px; }
+  .hero .play { background: #fff; color: #111; padding: 14px 30px; border-radius: 12px; font-weight: 700; }
+  .hero .progress { width: 260px; }
+  .hero .left { color: var(--dim); }
+
+  /* Rows */
+  .row-title { font-size: 28px; font-weight: 600; margin: 0 0 18px; color: var(--fg); display: flex; align-items: baseline; gap: 14px; }
+  .row-title small { font-size: 20px; color: var(--faint); font-weight: 500; }
+  .track { display: flex; gap: 28px; transition: transform .25s ease; }
+  .card { flex: none; position: relative; }
+  .card .label { margin-top: 14px; font-size: 22px; line-height: 1.3; }
+  .card .label .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .label .s { color: var(--dim); font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .duration { position: absolute; right: 12px; bottom: 12px; z-index: 2; background: rgba(0,0,0,.75); padding: 3px 8px; border-radius: 6px; font-size: 18px; font-weight: 600; }
+  .card .on-art { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 2; }
+  .card .src-dot { position: absolute; top: 14px; left: 14px; z-index: 2; }
+
+  /* App tiles */
+  .app { flex: none; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -.5px; position: relative; overflow: hidden; }
+  .app::after { content: ""; position: absolute; inset: 0; background: radial-gradient(100% 80% at 80% 0%, rgba(255,255,255,.18), transparent 60%); }
+
+  /* Layout A: top shelf */
+  #A .hero { top: 140px; }
+  #A .shelf { position: absolute; left: 96px; right: 0; top: 560px; z-index: 2; }
+  #A .shelf .art { width: 360px; height: 202px; }
+  #A .dock { position: absolute; left: 96px; right: 0; top: 880px; z-index: 2; }
+  #A .dock .app { width: 232px; height: 132px; font-size: 34px; }
+  #A .dock .track { gap: 26px; }
+  #A .dock-label { position: absolute; left: 96px; top: 1030px; font-size: 22px; color: var(--dim); z-index: 2; }
+
+  /* Layout B: rows with info */
+  #B .hero { top: 120px; }
+  #B .hero h2 { font-size: 72px; }
+  #B .rows { position: absolute; left: 96px; right: 0; top: 520px; z-index: 2; transition: transform .3s ease; }
+  #B .row { margin-bottom: 46px; }
+  #B .row.dim { opacity: .55; }
+  #B .w169 .art { width: 400px; height: 225px; }
+  #B .yt .art { width: 400px; height: 225px; }
+  #B .poster .art { width: 200px; height: 300px; }
+  #B .apps .app { width: 256px; height: 144px; font-size: 36px; }
+  #B .fade { position: absolute; left: 0; right: 0; top: 0; height: 520px; z-index: 1; pointer-events: none; }
+
+  /* Layout C: dashboard */
+  #C { padding: 120px 96px 0; }
+  #C .hello { position: absolute; top: 48px; left: 96px; font-size: 30px; color: var(--dim); }
+  #C .hello b { color: var(--fg); }
+  #C .grid { display: grid; grid-template-columns: 1.55fr 1fr 1fr; grid-template-rows: 300px 300px; gap: 28px; }
+  #C .tile { border-radius: 22px; background: #13151b; padding: 28px; position: relative; overflow: hidden; }
+  #C .tile h3 { margin: 0 0 6px; font-size: 22px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+  #C .big { grid-row: span 2; padding: 0; }
+  #C .big .art { position: absolute; inset: 0; border-radius: 0; }
+  #C .big .content { position: absolute; left: 44px; right: 44px; bottom: 40px; z-index: 2; }
+  #C .big h2 { font-size: 64px; margin: 10px 0; letter-spacing: -1px; line-height: 1; }
+  #C .big .meta { font-size: 24px; color: var(--dim); margin-bottom: 22px; }
+  #C .mini { display: flex; gap: 14px; margin-top: 16px; }
+  #C .mini .art { width: 152px; height: 86px; border-radius: 10px; }
+  #C .mini.posters .art { width: 92px; height: 138px; }
+  #C .line { font-size: 24px; margin-top: 10px; }
+  #C .line span { color: var(--dim); }
+  #C .dock { margin-top: 40px; }
+  #C .dock .app { width: 148px; height: 148px; font-size: 26px; border-radius: 30px; }
+  #C .dock .track { gap: 22px; }
+  #C .next .art { position: absolute; inset: 0; border-radius: 0; opacity: .55; }
+  #C .next .content { position: relative; z-index: 2; }
+  #C .next h4 { font-size: 36px; margin: 70px 0 6px; }
+  #C .pinned .art { width: 118px; height: 176px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Launcher · mockups</h1>
+  <button class="tab" data-layout="A" aria-selected="true">A · Top Shelf (Apple TV)</button>
+  <button class="tab" data-layout="B">B · Filas con info</button>
+  <button class="tab" data-layout="C">C · Tablero de cards</button>
+  <span class="keys"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd> moverse como con el control · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> cambiar layout</span>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport">
+    <div class="stage" id="stage">
+      <div class="layout active" id="A"></div>
+      <div class="layout" id="B"></div>
+      <div class="layout" id="C"></div>
+    </div>
+  </div>
+  <aside class="notes" id="notes"></aside>
+</div>
+
+<script>
+const SRC = {
+  jellyfin: { name: "Jellyfin", color: "#a95ce0" },
+  youtube: { name: "YouTube", color: "#ff2d2d" },
+  prime: { name: "Prime Video", color: "#1fa2ff" },
+  disney: { name: "Disney+", color: "#3d7bff" },
+  max: { name: "Max", color: "#5a6bff" },
+  seerr: { name: "Seerr", color: "#8b5cf6" },
+};
+
+const PALETTE = {
+  severance: ["#0b1d2e", "#2f5d80", "#a9c3d6"], dune: ["#2a1405", "#9a4b12", "#f0b46a"],
+  bear: ["#161616", "#5a2d1e", "#d98b4a"], shogun: ["#1b0a0a", "#6b1414", "#d4a35a"],
+  conclave: ["#120b1e", "#5b1f3d", "#c9485b"], anora: ["#1d0f2b", "#a8326e", "#f5a7c4"],
+  brutalist: ["#141414", "#4a4a4a", "#cfc6b4"], flow: ["#06202a", "#0f6b6b", "#8fd6c2"],
+  nosferatu: ["#050505", "#2b2b38", "#7d7f99"], sewers: ["#10170c", "#3f5a22", "#b6d67a"],
+  sun: ["#1a0b00", "#c2410c", "#fde047"], phones: ["#0a0a0a", "#7f1d1d", "#f87171"],
+  chips: ["#03121f", "#0e7490", "#67e8f9"], f1: ["#140505", "#991b1b", "#fca5a5"],
+  reacher: ["#0a1420", "#24476b", "#7fb2e5"], fallout: ["#1f1a05", "#6b5a12", "#e8d27a"],
+  andor: ["#0c0c0c", "#3b2a1a", "#c48b4a"], bluey: ["#06223b", "#2f7fc1", "#9fd3ff"],
+  tlou: ["#0e140c", "#3a4a2a", "#a5b48a"],
+};
+const grad = k => { const [a, b, c] = PALETTE[k]; return `linear-gradient(135deg, ${a} 0%, ${b} 55%, ${c} 120%)`; };
+
+// Jellyfin: real data from the server API (resume + next up + latest).
+const RESUME = [
+  { k: "severance", src: "jellyfin", title: "Severance", sub: "T2 · E4 «Woe's Hollow»", meta: "2025 · Serie · 52 min · 4K HDR", desc: "Los empleados de Lumon viajan a un retiro de la empresa donde los secretos del innie y el outie empiezan a cruzarse.", p: .62, left: "Quedan 20 min", action: "Reanudar" },
+  { k: "dune", src: "jellyfin", title: "Dune: Parte dos", sub: "Película · 2024", meta: "2024 · Ciencia ficción · 2 h 46 min · Dolby Vision", desc: "Paul Atreides se une a Chani y los Fremen mientras busca venganza contra quienes destruyeron a su familia.", p: .35, left: "Queda 1 h 48 min", action: "Reanudar" },
+  { k: "bear", src: "jellyfin", title: "The Bear", sub: "T3 · E2 «Next»", meta: "2024 · Serie · 31 min", desc: "Carmy intenta llevar el restaurante a otro nivel mientras el equipo se adapta a las nuevas reglas.", p: .28, left: "Quedan 22 min", action: "Reanudar" },
+  { k: "shogun", src: "jellyfin", title: "Shōgun", sub: "Próximo: T1 · E7 «Una piedra se esconde»", meta: "2024 · Serie · 58 min", desc: "Toranaga enfrenta una decisión que puede cambiar el destino de Japón.", p: 0, left: "Próximo episodio", action: "Reproducir" },
+];
+const LATEST = [
+  { k: "conclave", src: "jellyfin", title: "Cónclave", sub: "2024", meta: "2024 · Drama · 2 h", desc: "Agregada ayer. Pedida desde Seerr.", p: 0, action: "Reproducir" },
+  { k: "anora", src: "jellyfin", title: "Anora", sub: "2024", meta: "2024 · Comedia dramática · 2 h 19 min", desc: "Agregada hace 2 días.", p: 0, action: "Reproducir" },
+  { k: "brutalist", src: "jellyfin", title: "The Brutalist", sub: "2024", meta: "2024 · Drama · 3 h 35 min", desc: "Agregada hace 3 días.", p: 0, action: "Reproducir" },
+  { k: "flow", src: "jellyfin", title: "Flow", sub: "2024", meta: "2024 · Animación · 1 h 25 min", desc: "Agregada hace 4 días. Pedida desde Seerr.", p: 0, action: "Reproducir" },
+  { k: "nosferatu", src: "jellyfin", title: "Nosferatu", sub: "2024", meta: "2024 · Terror · 2 h 12 min", desc: "Agregada hace 5 días.", p: 0, action: "Reproducir" },
+];
+// YouTube: newest uploads of your subscriptions (YouTube Data API, login for TV).
+const YT = [
+  { k: "sewers", src: "youtube", title: "The Surprising Genius of Sewers", sub: "Veritasium · hace 3 h", dur: "18:42", meta: "Veritasium · 1,2 M vistas · hace 3 horas", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "sun", src: "youtube", title: "What If the Sun Disappeared?", sub: "Kurzgesagt · hace 1 día", dur: "11:05", meta: "Kurzgesagt · 3,4 M vistas · hace 1 día", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "phones", src: "youtube", title: "The Best Phones of 2026", sub: "MKBHD · hace 2 días", dur: "21:17", meta: "Marques Brownlee · 2,1 M vistas · hace 2 días", desc: "Nuevo en tus suscripciones.", p: .4, action: "Seguir en YouTube" },
+  { k: "chips", src: "youtube", title: "The Machine That Makes Every Chip", sub: "Cleo Abram · hace 2 días", dur: "16:30", meta: "Cleo Abram · 980 k vistas · hace 2 días", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "f1", src: "youtube", title: "Highlights: Gran Premio de México", sub: "FORMULA 1 · hace 4 días", dur: "9:58", meta: "FORMULA 1 · 5,6 M vistas · hace 4 días", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+];
+// Prime, Disney+, Max: no API and no access to their "continue watching". Pinned by hand, opened by deep link.
+const PINNED = [
+  { k: "reacher", src: "prime", title: "Reacher", sub: "Fijado · abre en Prime Video", meta: "Prime Video · T3 · fijado por vos", desc: "Abre directo la serie en Prime Video con un link. Prime no comparte qué estás viendo, así que esto lo fijás vos (desde el iPhone).", p: 0, action: "Abrir en Prime Video" },
+  { k: "fallout", src: "prime", title: "Fallout", sub: "Fijado · abre en Prime Video", meta: "Prime Video · T2 · fijado por vos", desc: "Imágenes y datos de TMDB; el link abre la ficha en Prime Video.", p: 0, action: "Abrir en Prime Video" },
+  { k: "andor", src: "disney", title: "Andor", sub: "Fijado · abre en Disney+", meta: "Disney+ · T2 · fijado por vos", desc: "Abre directo la serie en Disney+ (disneyplus://).", p: 0, action: "Abrir en Disney+" },
+  { k: "bluey", src: "disney", title: "Bluey", sub: "Fijado · abre en Disney+", meta: "Disney+ · fijado por vos", desc: "Abre directo la serie en Disney+.", p: 0, action: "Abrir en Disney+" },
+  { k: "tlou", src: "max", title: "The Last of Us", sub: "Fijado · abre en Max", meta: "Max · T2 · fijado por vos", desc: "Abre directo la serie en HBO Max.", p: 0, action: "Abrir en Max" },
+];
+
+const APPS = [
+  { id: "youtube", name: "YouTube", bg: "#0f0f0f", fg: "#ff2d2d" },
+  { id: "jellyfin", name: "Jellyfin", bg: "linear-gradient(135deg,#6a2c91,#00a4dc)", fg: "#fff" },
+  { id: "prime", name: "prime video", bg: "#0f171e", fg: "#1fa2ff" },
+  { id: "disney", name: "Disney+", bg: "linear-gradient(135deg,#0b1f6b,#1a4fd6)", fg: "#fff" },
+  { id: "max", name: "max", bg: "#002be7", fg: "#fff" },
+  { id: "spotify", name: "Spotify", bg: "#121212", fg: "#1ed760" },
+  { id: "9now", name: "9Now", bg: "#0a2a66", fg: "#fff" },
+  { id: "7plus", name: "7plus", bg: "#e2001a", fg: "#fff" },
+  { id: "10play", name: "10 Play", bg: "#111", fg: "#ff2a3c" },
+  { id: "sbs", name: "SBS", bg: "#ffcc00", fg: "#111" },
+  { id: "iview", name: "iview", bg: "#0b0b0b", fg: "#2ff3e0" },
+];
+const SHELF = {
+  jellyfin: RESUME, youtube: YT,
+  prime: PINNED.filter(i => i.src === "prime"), disney: PINNED.filter(i => i.src === "disney"), max: PINNED.filter(i => i.src === "max"),
+};
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ITEMS = [];
+const ref = item => { ITEMS.push(item); return ITEMS.length - 1; };
+const badge = src => `<span class="badge"><i style="background:${SRC[src].color}"></i>${SRC[src].name}</span>`;
+const art = (item, size, extra = "") => `<div class="art" style="background:${grad(item.k)}">${extra}<div class="mark" style="font-size:${size}px">${esc(item.title)}</div></div>`;
+const progress = p => p > 0 ? `<div class="progress"><b style="width:${p * 100}%"></b></div>` : "";
+const appTile = a => `<div class="app focusable" data-app="${a.id}" style="background:${a.bg};color:${a.fg}">${esc(a.name)}</div>`;
+
+function card(item, kind) {
+  const i = ref(item);
+  if (kind === "poster") return `<div class="card focusable" data-item="${i}">${art(item, 30)}</div>`;
+  const dur = item.dur ? `<span class="duration">${item.dur}</span>` : "";
+  const bar = item.p > 0 ? `<div class="on-art">${progress(item.p)}</div>` : "";
+  return `<div class="card focusable" data-item="${i}">${art(item, 40, dur + bar)}
+    <div class="label"><div class="t">${esc(item.title)}</div><div class="s">${esc(item.sub)}</div></div></div>`;
+}
+
+const topbar = `<div class="topbar"><span class="pill focusable">Entradas</span><span class="pill focusable">Ajustes</span><span class="clock" data-clock></span></div>`;
+const heroBlock = `<div class="hero-bg" data-hero-bg><div class="mark" data-hero-mark></div></div>
+  <div class="hero"><div data-hero-badge></div><h2 data-hero-title></h2><div class="meta" data-hero-meta></div>
+  <p class="desc" data-hero-desc></p><div class="actions"><span class="play" data-hero-action></span><div data-hero-progress></div><span class="left" data-hero-left></span></div></div>`;
+
+// ---- A: Apple TV style top shelf --------------------------------------------------------------
+function renderA() {
+  document.getElementById("A").innerHTML = `${heroBlock}${topbar}
+    <div class="shelf"><div class="track" data-shelf></div></div>
+    <div class="dock"><div class="track">${APPS.map(appTile).join("")}</div></div>
+    <div class="dock-label" data-dock-label></div>`;
+}
+function fillShelf(appId) {
+  const shelf = document.querySelector("#A [data-shelf]");
+  const items = SHELF[appId];
+  const label = document.querySelector("#A [data-dock-label]");
+  if (!items) {
+    const a = APPS.find(x => x.id === appId);
+    shelf.innerHTML = `<div class="card" style="opacity:.75"><div class="art" style="width:760px;height:202px;background:${a.bg}"><div class="mark" style="font-size:64px;color:${a.fg}">${esc(a.name)}</div></div>
+      <div class="label"><div class="s">Sin contenido para mostrar: OK abre la app</div></div></div>`;
+    label.textContent = "";
+    return null;
+  }
+  shelf.innerHTML = items.map(it => card(it)).join("");
+  label.textContent = { jellyfin: "Jellyfin · seguir viendo y próximos episodios", youtube: "YouTube · nuevo en tus suscripciones",
+    prime: "Prime Video · fijados por vos (Prime no comparte su «seguir viendo»)", disney: "Disney+ · fijados por vos", max: "Max · fijados por vos" }[appId];
+  return items[0];
+}
+
+// ---- B: rows with info ------------------------------------------------------------------------
+function renderB() {
+  const row = (title, note, cls, html) => `<section class="row ${cls}"><div class="row-title">${title}<small>${note}</small></div><div class="track">${html}</div></section>`;
+  document.getElementById("B").innerHTML = `${heroBlock}${topbar}
+    <div class="rows" data-rows>
+      ${row("Seguir viendo", "Jellyfin", "w169", RESUME.map(i => card(i)).join(""))}
+      ${row("Nuevo en tus suscripciones", "YouTube", "yt", YT.map(i => card(i)).join(""))}
+      ${row("Apps", "", "apps", APPS.map(appTile).join(""))}
+      ${row("Fijados", "Prime Video · Disney+ · Max, con link directo", "w169", PINNED.map(i => card(i)).join(""))}
+      ${row("Agregado recientemente", "Jellyfin", "poster", LATEST.map(i => card(i, "poster")).join(""))}
+    </div>`;
+}
+
+// ---- C: dashboard of cards --------------------------------------------------------------------
+function renderC() {
+  const s = RESUME[0], next = RESUME[3];
+  const iS = ref(s), iN = ref(next), iY = ref(YT[0]), iL = ref(LATEST[0]), iP = ref(PINNED[0]);
+  document.getElementById("C").innerHTML = `${topbar}
+    <div class="hello">Buenas noches · <b data-date></b></div>
+    <div class="grid">
+      <div class="tile big focusable" data-item="${iS}">${art(s, 1)}
+        <div class="content">${badge("jellyfin")}<h2>${esc(s.title)}</h2><div class="meta">${esc(s.sub)} · ${esc(s.left)}</div>
+        <div class="progress" style="width:420px;margin-bottom:24px"><b style="width:${s.p * 100}%"></b></div>
+        <span class="play" style="background:#fff;color:#111;padding:14px 30px;border-radius:12px;font-weight:700;font-size:24px">▶ Reanudar</span></div></div>
+      <div class="tile next focusable" data-item="${iN}">${art(next, 1)}
+        <div class="content"><h3>Próximo episodio</h3><h4>${esc(next.title)}</h4><div class="line"><span>T1 · E7 · 58 min</span></div></div></div>
+      <div class="tile focusable" data-item="${iY}"><h3>${badge("youtube")}</h3><div class="line">5 videos nuevos <span>· tus suscripciones</span></div>
+        <div class="mini">${YT.slice(0, 3).map(i => art(i, 14)).join("")}</div></div>
+      <div class="tile focusable" data-item="${iL}"><h3>Agregado esta semana</h3><div class="line">5 películas <span>· Jellyfin</span></div>
+        <div class="mini posters">${LATEST.slice(0, 4).map(i => art(i, 12)).join("")}</div></div>
+      <div class="tile pinned focusable" data-item="${iP}"><h3>Fijados</h3><div class="line">Prime · Disney+ · Max</div>
+        <div class="mini">${PINNED.slice(0, 3).map(i => art(i, 13)).join("")}</div></div>
+    </div>
+    <div class="dock"><div class="track">${APPS.map(appTile).join("")}</div></div>`;
+}
+
+// ---- Hero, focus and navigation ---------------------------------------------------------------
+function setHero(layout, item) {
+  if (!item) return;
+  const q = s => layout.querySelector(s);
+  if (!q("[data-hero-bg]")) return;
+  q("[data-hero-bg]").style.background = grad(item.k);
+  q("[data-hero-mark]").textContent = item.title;
+  q("[data-hero-badge]").innerHTML = badge(item.src);
+  q("[data-hero-title]").textContent = item.title;
+  q("[data-hero-meta]").textContent = item.meta;
+  q("[data-hero-desc]").textContent = item.desc;
+  q("[data-hero-action]").textContent = "▶ " + item.action;
+  q("[data-hero-progress]").innerHTML = item.p > 0 ? `<div class="progress" style="width:260px"><b style="width:${item.p * 100}%"></b></div>` : "";
+  q("[data-hero-left]").textContent = item.left || "";
+}
+
+let current = "A";
+const focused = {};
+const layoutEl = () => document.getElementById(current);
+
+function focus(el) {
+  const layout = layoutEl();
+  layout.querySelectorAll(".focused").forEach(x => x.classList.remove("focused"));
+  el.classList.add("focused");
+  focused[current] = el;
+  if (el.dataset.item) setHero(layout, ITEMS[+el.dataset.item]);
+  if (current === "A" && el.dataset.app) setHero(layout, fillShelf(el.dataset.app) || null);
+  keepVisible(el);
+}
+
+function keepVisible(el) {
+  const track = el.closest(".track");
+  if (track && track.children.length > 1) {
+    const idx = [...track.children].indexOf(el);
+    const step = track.children[0].getBoundingClientRect().width / scale + 28;
+    const shift = Math.max(0, idx - 2) * step;
+    track.style.transform = `translateX(${-shift}px)`;
+  }
+  if (current === "B") {
+    const rows = layoutEl().querySelector("[data-rows]");
+    const row = el.closest(".row");
+    if (row) {
+      const all = [...rows.children];
+      const i = all.indexOf(row);
+      rows.style.transform = `translateY(${-all.slice(0, i).reduce((h, r) => h + r.offsetHeight + 46, 0)}px)`;
+      all.forEach((r, j) => r.classList.toggle("dim", j < i));
+    }
+  }
+}
+
+// Spatial navigation: the nearest focusable in the pressed direction, as a TV remote does.
+function move(dir) {
+  const layout = layoutEl();
+  const cur = focused[current];
+  const cands = [...layout.querySelectorAll(".focusable")].filter(e => e !== cur && e.offsetParent !== null);
+  const c = cur.getBoundingClientRect();
+  const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const e of cands) {
+    const r = e.getBoundingClientRect();
+    const ex = r.left + r.width / 2, ey = r.top + r.height / 2;
+    const dx = ex - cx, dy = ey - cy;
+    const ok = { left: dx < -4, right: dx > 4, up: dy < -20, down: dy > 20 }[dir];
+    if (!ok) continue;
+    const main = dir === "left" || dir === "right" ? Math.abs(dx) : Math.abs(dy);
+    const cross = dir === "left" || dir === "right" ? Math.abs(dy) : Math.abs(dx);
+    const score = main + cross * 2.5;
+    if (score < bestScore) { bestScore = score; best = e; }
+  }
+  if (best) focus(best);
+}
+
+function show(id) {
+  current = id;
+  document.querySelectorAll(".layout").forEach(l => l.classList.toggle("active", l.id === id));
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.layout === id));
+  const layout = layoutEl();
+  const start = focused[id] || (id === "A" ? layout.querySelector('[data-app="jellyfin"]') : layout.querySelector(".card, .tile"));
+  requestAnimationFrame(() => focus(start));
+  document.getElementById("notes").innerHTML = NOTES[id];
+}
+
+const legend = `<h2>De dónde sale cada cosa</h2><ul>
+  <li><span class="src" style="background:${SRC.jellyfin.color}"></span><b>Jellyfin</b>: datos reales del servidor (seguir viendo, próximos, agregados). OK abre en Wholphin.</li>
+  <li><span class="src" style="background:${SRC.youtube.color}"></span><b>YouTube</b>: últimos videos de tus suscripciones, con la API de YouTube y login para TV. Abre en la app de YouTube. No incluye las recomendaciones de su portada.</li>
+  <li><span class="src" style="background:${SRC.prime.color}"></span><b>Prime, Disney+, Max</b>: no dejan leer su «seguir viendo». Lo que se puede es <b>fijar</b> series o películas (imagen de TMDB + link directo a la app).</li></ul>`;
+const NOTES = {
+  A: `<h2>A · Top Shelf</h2><ul><li>Como el Apple TV: abajo la fila de apps, arriba lo de la app enfocada.</li>
+    <li>Jellyfin muestra seguir viendo, YouTube tus suscripciones, Prime/Disney+/Max sus fijados.</li>
+    <li>Subís a una card y el fondo grande cambia con su info.</li><li>Lo más limpio y lo más liviano.</li></ul>${legend}`,
+  B: `<h2>B · Filas con info</h2><ul><li>Arriba la info grande de lo enfocado, abajo filas por fuente.</li>
+    <li>Todo a la vista sin entrar a las apps; al bajar, las filas suben.</li>
+    <li>Es lo más parecido a Google TV, pero sin publicidad y con tus fuentes.</li></ul>${legend}`,
+  C: `<h2>C · Tablero de cards</h2><ul><li>Un resumen en una sola pantalla: lo que estabas viendo grande, y cards con lo nuevo.</li>
+    <li>Cada card entra a su lista completa.</li><li>Abajo las apps como íconos.</li>
+    <li>El más «personal», pero con menos contenido visible por fuente.</li></ul>${legend}`,
+};
+
+// ---- Boot -------------------------------------------------------------------------------------
+let scale = 1;
+function fit() {
+  const vp = document.getElementById("viewport");
+  scale = vp.clientWidth / 1920;
+  document.getElementById("stage").style.transform = `scale(${scale})`;
+}
+function tick() {
+  const now = new Date();
+  document.querySelectorAll("[data-clock]").forEach(e => e.textContent = now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }));
+  document.querySelectorAll("[data-date]").forEach(e => e.textContent = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" }));
+}
+renderA(); renderB(); renderC();
+fit(); tick(); setInterval(tick, 10000);
+addEventListener("resize", () => { fit(); keepVisible(focused[current]); });
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => show(t.dataset.layout));
+addEventListener("keydown", e => {
+  const dir = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" }[e.key];
+  if (dir) { e.preventDefault(); move(dir); }
+  if (["1", "2", "3"].includes(e.key)) show("ABC"[+e.key - 1]);
+});
+show(["A", "B", "C"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "A");
+</script>
+</body>
+</html>

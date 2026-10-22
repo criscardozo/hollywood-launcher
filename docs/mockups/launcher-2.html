@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: mockups, segunda tanda</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #07080b; --fg: #f2f3f5; --dim: rgba(242,243,245,.64); --faint: rgba(242,243,245,.4);
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #1b1d22; color: var(--fg); font-family: var(--font); }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; flex-wrap: wrap; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 10px 0 0; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .keys { margin-left: auto; color: var(--dim); }
+  kbd { background: #2a2d34; border-radius: 4px; padding: 2px 6px; font-family: inherit; font-size: 12px; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .notes { width: 320px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+
+  .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: var(--bg); overflow: hidden; }
+  .layout { position: absolute; inset: 0; display: none; }
+  .layout.active { display: block; }
+
+  /* Background: wallpaper by default, the focused item's image otherwise (crossfade between two layers) */
+  .bg { position: absolute; inset: 0; }
+  .bg > div { position: absolute; inset: 0; background-size: cover; background-position: center; transition: opacity .6s ease; }
+  .bg .mark { position: absolute; right: 5%; top: 12%; font-size: 120px; font-weight: 800; opacity: .14; letter-spacing: -3px; text-align: right; max-width: 38%; line-height: .9; }
+  .shade { position: absolute; inset: 0; pointer-events: none; }
+  .shade.left { background: linear-gradient(90deg, rgba(7,8,11,.94) 0%, rgba(7,8,11,.7) 34%, rgba(7,8,11,.05) 68%), linear-gradient(0deg, rgba(7,8,11,.98) 0%, rgba(7,8,11,.6) 35%, transparent 60%); }
+  .shade.bottom { background: linear-gradient(0deg, rgba(7,8,11,.96) 0%, rgba(7,8,11,.55) 38%, transparent 65%); }
+  .shade.soft { background: linear-gradient(0deg, rgba(7,8,11,.9) 0%, rgba(7,8,11,.2) 50%, rgba(7,8,11,.25) 100%); }
+
+  .topbar { position: absolute; top: 44px; right: 72px; display: flex; align-items: center; gap: 18px; z-index: 6; }
+  .pill { padding: 10px 20px; border-radius: 999px; background: rgba(255,255,255,.12); font-size: 22px; color: var(--dim); backdrop-filter: blur(10px); }
+  .pill.focused { background: #fff; color: #111; }
+  .clock { font-weight: 600; font-size: 34px; }
+
+  .art { position: relative; overflow: hidden; border-radius: 14px; background: #222; }
+  .art::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 85% 10%, rgba(255,255,255,.18), transparent 55%), linear-gradient(180deg, transparent 45%, rgba(0,0,0,.55)); }
+  .art .mark { position: absolute; left: 6%; bottom: 16%; right: 6%; z-index: 1; font-weight: 800; line-height: .95; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
+  .focusable { transition: transform .16s ease, box-shadow .16s ease, outline-color .16s; outline: 4px solid transparent; outline-offset: 4px; }
+  .card.focused, .app.focused, .vid.focused, .tile.focused { transform: scale(1.06); outline-color: #fff; box-shadow: 0 24px 50px rgba(0,0,0,.6); z-index: 3; }
+  .vid.focused { transform: scale(1.03); }
+
+  .badge { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+  .badge i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); overflow: hidden; }
+  .progress b { display: block; height: 100%; background: #fff; }
+
+  .hero { position: absolute; left: 96px; z-index: 4; max-width: 860px; transition: opacity .3s; }
+  .hero h2 { font-size: 80px; line-height: 1; margin: 16px 0 14px; letter-spacing: -1.5px; }
+  .hero .meta { font-size: 26px; color: var(--dim); margin-bottom: 16px; }
+  .hero .desc { font-size: 25px; line-height: 1.4; color: var(--dim); margin: 0 0 24px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hero .actions { display: flex; align-items: center; gap: 24px; font-size: 24px; }
+  .hero .play { background: #fff; color: #111; padding: 14px 30px; border-radius: 12px; font-weight: 700; }
+  .hero .left { color: var(--dim); }
+
+  .row-title { font-size: 26px; font-weight: 600; margin: 0 0 16px; display: flex; align-items: baseline; gap: 12px; }
+  .row-title small { font-size: 19px; color: var(--faint); font-weight: 500; }
+  .track { display: flex; gap: 26px; transition: transform .25s ease; }
+  .card { flex: none; position: relative; }
+  .card .label { margin-top: 12px; font-size: 21px; line-height: 1.3; max-width: 100%; }
+  .card .label .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .label .s { color: var(--dim); font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .duration { position: absolute; right: 10px; bottom: 10px; z-index: 2; background: rgba(0,0,0,.78); padding: 3px 8px; border-radius: 6px; font-size: 17px; font-weight: 600; }
+  .on-art { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2; }
+  .app { flex: none; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -.5px; position: relative; overflow: hidden; }
+  .app::after { content: ""; position: absolute; inset: 0; background: radial-gradient(100% 80% at 80% 0%, rgba(255,255,255,.18), transparent 60%); }
+  .glass { background: rgba(16,18,24,.55); backdrop-filter: blur(24px) saturate(1.3); border: 1px solid rgba(255,255,255,.08); border-radius: 26px; }
+
+  /* D: top shelf + rows below */
+  #D .page { position: absolute; inset: 0; transition: transform .35s ease; z-index: 4; }
+  #D .hero { top: 140px; }
+  #D .shelf { position: absolute; left: 96px; right: 0; top: 560px; }
+  #D .shelf .art { width: 360px; height: 202px; }
+  #D .dock { position: absolute; left: 96px; right: 0; top: 880px; }
+  #D .dock .app { width: 216px; height: 122px; font-size: 32px; }
+  #D .below { position: absolute; left: 96px; right: 0; top: 1060px; }
+  #D .below .row { margin-bottom: 46px; }
+  #D .poster .art { width: 196px; height: 294px; }
+  #D .w169 .art { width: 360px; height: 202px; }
+
+  /* E: hero + Jellyfin and YouTube side by side */
+  #E .hero { top: 90px; }
+  #E .hero h2 { font-size: 60px; margin: 10px 0; }
+  #E .hero .desc { -webkit-line-clamp: 1; margin-bottom: 18px; }
+  #E .panels { position: absolute; left: 96px; right: 96px; top: 405px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; z-index: 4; }
+  #E .panel { padding: 26px 28px 22px; }
+  #E .panel .w169 .art { width: 230px; height: 129px; }
+  #E .panel .poster .art { width: 96px; height: 144px; }
+  #E .panel .track { gap: 20px; }
+  #E .panel .row + .row { margin-top: 22px; }
+  #E .vids { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+  #E .vid { display: flex; gap: 16px; align-items: center; border-radius: 14px; padding: 8px; }
+  #E .vid .art { width: 150px; height: 84px; flex: none; border-radius: 10px; }
+  #E .vid { padding: 6px; }
+  #E .vid .t { font-size: 20px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #E .vid .s { font-size: 17px; color: var(--dim); margin-top: 4px; }
+  #E .dock { position: absolute; left: 96px; right: 96px; bottom: 34px; z-index: 4; }
+  #E .dock .track { gap: 18px; }
+  #E .dock .app { width: 150px; height: 84px; font-size: 23px; border-radius: 14px; }
+
+  /* F: ambient */
+  #F .ambient { position: absolute; left: 96px; top: 110px; z-index: 4; transition: opacity .35s; }
+  #F .ambient .big { font-size: 190px; font-weight: 700; letter-spacing: -6px; line-height: .9; }
+  #F .ambient .date { font-size: 36px; color: var(--dim); margin-top: 12px; }
+  #F .ambient .credit { font-size: 20px; color: var(--faint); margin-top: 22px; }
+  #F .hero { top: 110px; opacity: 0; }
+  #F .hero h2 { font-size: 70px; }
+  #F.has-item .ambient { opacity: 0; }
+  #F.has-item .hero { opacity: 1; }
+  #F .tray { position: absolute; left: 64px; right: 64px; bottom: 40px; padding: 28px 32px 22px; z-index: 4; }
+  #F .tray .row + .row { margin-top: 22px; }
+  #F .tray .art { width: 252px; height: 142px; }
+  #F .tray .poster .art { width: 120px; height: 180px; }
+  #F .tray .track { gap: 20px; }
+  #F .tray .app { width: 150px; height: 84px; font-size: 23px; border-radius: 14px; }
+  #F .tray .label { font-size: 18px; }
+  #F .tray .label .s { font-size: 16px; }
+
+  /* G: rotating feature */
+  #G .hero { top: 150px; }
+  #G .dots { position: absolute; left: 96px; top: 520px; display: flex; gap: 10px; z-index: 4; }
+  #G .dots i { width: 34px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.3); }
+  #G .dots i.on { background: #fff; }
+  #G .lower { position: absolute; left: 96px; right: 0; top: 580px; z-index: 4; transition: transform .35s ease; }
+  #G .lower .row { margin-bottom: 40px; }
+  #G .lower .app { width: 200px; height: 112px; font-size: 30px; }
+  #G .lower .w169 .art { width: 340px; height: 191px; }
+  #G .lower .poster .art { width: 180px; height: 270px; }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Launcher · segunda tanda</h1>
+  <button class="tab" data-layout="D" aria-selected="true">D · Top Shelf + filas</button>
+  <button class="tab" data-layout="E">E · Jellyfin | YouTube</button>
+  <button class="tab" data-layout="F">F · Ambiente</button>
+  <button class="tab" data-layout="G">G · Destacado rotativo</button>
+  <span class="keys"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> control · <kbd>4</kbd>–<kbd>7</kbd> layout · <kbd>W</kbd> cambiar wallpaper</span>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport"><div class="stage" id="stage">
+    <div class="layout active" id="D"></div><div class="layout" id="E"></div><div class="layout" id="F"></div><div class="layout" id="G"></div>
+  </div></div>
+  <aside class="notes" id="notes"></aside>
+</div>
+<script>
+const SRC = {
+  jellyfin: { name: "Jellyfin", color: "#a95ce0" },
+  youtube: { name: "YouTube", color: "#ff2d2d" },
+  prime: { name: "Prime Video", color: "#1fa2ff" },
+  disney: { name: "Disney+", color: "#3d7bff" },
+  max: { name: "Max", color: "#5a6bff" },
+  seerr: { name: "Seerr", color: "#8b5cf6" },
+};
+
+const PALETTE = {
+  severance: ["#0b1d2e", "#2f5d80", "#a9c3d6"], dune: ["#2a1405", "#9a4b12", "#f0b46a"],
+  bear: ["#161616", "#5a2d1e", "#d98b4a"], shogun: ["#1b0a0a", "#6b1414", "#d4a35a"],
+  conclave: ["#120b1e", "#5b1f3d", "#c9485b"], anora: ["#1d0f2b", "#a8326e", "#f5a7c4"],
+  brutalist: ["#141414", "#4a4a4a", "#cfc6b4"], flow: ["#06202a", "#0f6b6b", "#8fd6c2"],
+  nosferatu: ["#050505", "#2b2b38", "#7d7f99"], sewers: ["#10170c", "#3f5a22", "#b6d67a"],
+  sun: ["#1a0b00", "#c2410c", "#fde047"], phones: ["#0a0a0a", "#7f1d1d", "#f87171"],
+  chips: ["#03121f", "#0e7490", "#67e8f9"], f1: ["#140505", "#991b1b", "#fca5a5"],
+  reacher: ["#0a1420", "#24476b", "#7fb2e5"], fallout: ["#1f1a05", "#6b5a12", "#e8d27a"],
+  andor: ["#0c0c0c", "#3b2a1a", "#c48b4a"], bluey: ["#06223b", "#2f7fc1", "#9fd3ff"],
+  tlou: ["#0e140c", "#3a4a2a", "#a5b48a"],
+};
+const grad = k => { const [a, b, c] = PALETTE[k]; return `linear-gradient(135deg, ${a} 0%, ${b} 55%, ${c} 120%)`; };
+
+// Jellyfin: real data from the server API (resume + next up + latest).
+const RESUME = [
+  { k: "severance", src: "jellyfin", title: "Severance", sub: "T2 · E4 «Woe's Hollow»", meta: "2025 · Serie · 52 min · 4K HDR", desc: "Los empleados de Lumon viajan a un retiro de la empresa donde los secretos del innie y el outie empiezan a cruzarse.", p: .62, left: "Quedan 20 min", action: "Reanudar" },
+  { k: "dune", src: "jellyfin", title: "Dune: Parte dos", sub: "Película · 2024", meta: "2024 · Ciencia ficción · 2 h 46 min · Dolby Vision", desc: "Paul Atreides se une a Chani y los Fremen mientras busca venganza contra quienes destruyeron a su familia.", p: .35, left: "Queda 1 h 48 min", action: "Reanudar" },
+  { k: "bear", src: "jellyfin", title: "The Bear", sub: "T3 · E2 «Next»", meta: "2024 · Serie · 31 min", desc: "Carmy intenta llevar el restaurante a otro nivel mientras el equipo se adapta a las nuevas reglas.", p: .28, left: "Quedan 22 min", action: "Reanudar" },
+  { k: "shogun", src: "jellyfin", title: "Shōgun", sub: "Próximo: T1 · E7 «Una piedra se esconde»", meta: "2024 · Serie · 58 min", desc: "Toranaga enfrenta una decisión que puede cambiar el destino de Japón.", p: 0, left: "Próximo episodio", action: "Reproducir" },
+];
+const LATEST = [
+  { k: "conclave", src: "jellyfin", title: "Cónclave", sub: "2024", meta: "2024 · Drama · 2 h", desc: "Agregada ayer. Pedida desde Seerr.", p: 0, action: "Reproducir" },
+  { k: "anora", src: "jellyfin", title: "Anora", sub: "2024", meta: "2024 · Comedia dramática · 2 h 19 min", desc: "Agregada hace 2 días.", p: 0, action: "Reproducir" },
+  { k: "brutalist", src: "jellyfin", title: "The Brutalist", sub: "2024", meta: "2024 · Drama · 3 h 35 min", desc: "Agregada hace 3 días.", p: 0, action: "Reproducir" },
+  { k: "flow", src: "jellyfin", title: "Flow", sub: "2024", meta: "2024 · Animación · 1 h 25 min", desc: "Agregada hace 4 días. Pedida desde Seerr.", p: 0, action: "Reproducir" },
+  { k: "nosferatu", src: "jellyfin", title: "Nosferatu", sub: "2024", meta: "2024 · Terror · 2 h 12 min", desc: "Agregada hace 5 días.", p: 0, action: "Reproducir" },
+];
+// YouTube: newest uploads of your subscriptions (YouTube Data API, login for TV).
+const YT = [
+  { k: "sewers", src: "youtube", title: "The Surprising Genius of Sewers", sub: "Veritasium · hace 3 h", dur: "18:42", meta: "Veritasium · 1,2 M vistas · hace 3 horas", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "sun", src: "youtube", title: "What If the Sun Disappeared?", sub: "Kurzgesagt · hace 1 día", dur: "11:05", meta: "Kurzgesagt · 3,4 M vistas · hace 1 día", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "phones", src: "youtube", title: "The Best Phones of 2026", sub: "MKBHD · hace 2 días", dur: "21:17", meta: "Marques Brownlee · 2,1 M vistas · hace 2 días", desc: "Nuevo en tus suscripciones.", p: .4, action: "Seguir en YouTube" },
+  { k: "chips", src: "youtube", title: "The Machine That Makes Every Chip", sub: "Cleo Abram · hace 2 días", dur: "16:30", meta: "Cleo Abram · 980 k vistas · hace 2 días", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+  { k: "f1", src: "youtube", title: "Highlights: Gran Premio de México", sub: "FORMULA 1 · hace 4 días", dur: "9:58", meta: "FORMULA 1 · 5,6 M vistas · hace 4 días", desc: "Nuevo en tus suscripciones.", p: 0, action: "Ver en YouTube" },
+];
+// Prime, Disney+, Max: no API and no access to their "continue watching". Pinned by hand, opened by deep link.
+const PINNED = [
+  { k: "reacher", src: "prime", title: "Reacher", sub: "Fijado · abre en Prime Video", meta: "Prime Video · T3 · fijado por vos", desc: "Abre directo la serie en Prime Video con un link. Prime no comparte qué estás viendo, así que esto lo fijás vos (desde el iPhone).", p: 0, action: "Abrir en Prime Video" },
+  { k: "fallout", src: "prime", title: "Fallout", sub: "Fijado · abre en Prime Video", meta: "Prime Video · T2 · fijado por vos", desc: "Imágenes y datos de TMDB; el link abre la ficha en Prime Video.", p: 0, action: "Abrir en Prime Video" },
+  { k: "andor", src: "disney", title: "Andor", sub: "Fijado · abre en Disney+", meta: "Disney+ · T2 · fijado por vos", desc: "Abre directo la serie en Disney+ (disneyplus://).", p: 0, action: "Abrir en Disney+" },
+  { k: "bluey", src: "disney", title: "Bluey", sub: "Fijado · abre en Disney+", meta: "Disney+ · fijado por vos", desc: "Abre directo la serie en Disney+.", p: 0, action: "Abrir en Disney+" },
+  { k: "tlou", src: "max", title: "The Last of Us", sub: "Fijado · abre en Max", meta: "Max · T2 · fijado por vos", desc: "Abre directo la serie en HBO Max.", p: 0, action: "Abrir en Max" },
+];
+
+const APPS = [
+  { id: "youtube", name: "YouTube", bg: "#0f0f0f", fg: "#ff2d2d" },
+  { id: "jellyfin", name: "Jellyfin", bg: "linear-gradient(135deg,#6a2c91,#00a4dc)", fg: "#fff" },
+  { id: "prime", name: "prime video", bg: "#0f171e", fg: "#1fa2ff" },
+  { id: "disney", name: "Disney+", bg: "linear-gradient(135deg,#0b1f6b,#1a4fd6)", fg: "#fff" },
+  { id: "max", name: "max", bg: "#002be7", fg: "#fff" },
+  { id: "spotify", name: "Spotify", bg: "#121212", fg: "#1ed760" },
+  { id: "9now", name: "9Now", bg: "#0a2a66", fg: "#fff" },
+  { id: "7plus", name: "7plus", bg: "#e2001a", fg: "#fff" },
+  { id: "10play", name: "10 Play", bg: "#111", fg: "#ff2a3c" },
+  { id: "sbs", name: "SBS", bg: "#ffcc00", fg: "#111" },
+  { id: "iview", name: "iview", bg: "#0b0b0b", fg: "#2ff3e0" },
+];
+
+
+// Wallpapers: drawn landscapes standing in for real photos (Jellyfin backdrops, a photo folder, Bing / NASA image of the day).
+const WALLS = [
+  { name: "Atardecer", sky: ["#1b2a4a", "#c2577a", "#f6b26b"], sun: "#ffd9a0", hills: ["#2a1f3d", "#1a1530", "#0d0b1a"] },
+  { name: "Noche", sky: ["#020814", "#0b2545", "#13315c"], sun: "#e8eef7", hills: ["#0b1d33", "#071426", "#030a14"] },
+  { name: "Bosque", sky: ["#0f2a2a", "#3d6e5a", "#b8d8b0"], sun: "#f3f7d6", hills: ["#1d3b2f", "#132a22", "#0a1712"] },
+];
+let wallIndex = 0;
+function wallUrl(w) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1920 1080' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='${w.sky[0]}'/><stop offset='.6' stop-color='${w.sky[1]}'/><stop offset='1' stop-color='${w.sky[2]}'/></linearGradient>
+    <radialGradient id='g'><stop offset='0' stop-color='${w.sun}' stop-opacity='.9'/><stop offset='1' stop-color='${w.sun}' stop-opacity='0'/></radialGradient></defs>
+    <rect width='1920' height='1080' fill='url(#s)'/><circle cx='1380' cy='600' r='420' fill='url(#g)'/><circle cx='1380' cy='600' r='70' fill='${w.sun}'/>
+    <path d='M0 760 L260 600 L480 700 L760 520 L1040 690 L1300 560 L1560 700 L1920 580 L1920 1080 L0 1080Z' fill='${w.hills[0]}'/>
+    <path d='M0 860 L340 720 L620 820 L900 700 L1240 840 L1520 740 L1920 830 L1920 1080 L0 1080Z' fill='${w.hills[1]}'/>
+    <path d='M0 960 L420 870 L820 950 L1240 880 L1640 960 L1920 920 L1920 1080 L0 1080Z' fill='${w.hills[2]}'/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ITEMS = [];
+const ref = item => { ITEMS.push(item); return ITEMS.length - 1; };
+const badge = src => `<span class="badge"><i style="background:${SRC[src].color}"></i>${SRC[src].name}</span>`;
+const art = (item, size, extra = "") => `<div class="art" style="background:${grad(item.k)}">${extra}<div class="mark" style="font-size:${size}px">${esc(item.title)}</div></div>`;
+const appTile = a => `<div class="app focusable" data-app="${a.id}" style="background:${a.bg};color:${a.fg}">${esc(a.name)}</div>`;
+function card(item, kind, size = 36) {
+  const i = ref(item);
+  if (kind === "poster") return `<div class="card focusable" data-item="${i}">${art(item, size * .7)}</div>`;
+  const dur = item.dur ? `<span class="duration">${item.dur}</span>` : "";
+  const bar = item.p > 0 ? `<div class="on-art"><div class="progress"><b style="width:${item.p * 100}%"></b></div></div>` : "";
+  return `<div class="card focusable" data-item="${i}">${art(item, size, dur + bar)}<div class="label"><div class="t">${esc(item.title)}</div><div class="s">${esc(item.sub)}</div></div></div>`;
+}
+const row = (title, note, cls, html) => `<section class="row ${cls}"><div class="row-title">${title}<small>${note}</small></div><div class="track">${html}</div></section>`;
+const topbar = `<div class="topbar"><span class="pill focusable">Entradas</span><span class="pill focusable">Ajustes</span><span class="clock" data-clock></span></div>`;
+const bgBlock = shade => `<div class="bg"><div data-bg-a></div><div data-bg-b style="opacity:0"></div><div class="mark" data-bg-mark></div></div><div class="shade ${shade}"></div>`;
+const heroBlock = `<div class="hero"><div data-hero-badge></div><h2 data-hero-title></h2><div class="meta" data-hero-meta></div>
+  <p class="desc" data-hero-desc></p><div class="actions"><span class="play" data-hero-action></span><div data-hero-progress></div><span class="left" data-hero-left></span></div></div>`;
+const SHELF = { jellyfin: RESUME, youtube: YT, prime: PINNED.filter(i => i.src === "prime"), disney: PINNED.filter(i => i.src === "disney"), max: PINNED.filter(i => i.src === "max") };
+const homeItem = { wall: true, title: "", src: null };
+const mixedNew = [YT[0], LATEST[0], YT[1], LATEST[1], YT[2], LATEST[3], YT[3]];
+const inProgress = [RESUME[0], YT[2], RESUME[1], RESUME[2], RESUME[3]];
+
+// ---- D: A's top shelf, plus rows below the dock --------------------------------------------------
+function renderD() {
+  document.getElementById("D").innerHTML = `${bgBlock("left")}${topbar}<div class="page" data-page>${heroBlock}
+    <div class="shelf"><div class="track" data-shelf></div></div>
+    <div class="dock"><div class="track">${APPS.map(appTile).join("")}</div></div>
+    <div class="below">
+      ${row("Agregado recientemente", "Jellyfin", "poster", LATEST.map(i => card(i, "poster")).join(""))}
+      ${row("Más de tus suscripciones", "YouTube", "w169", YT.slice().reverse().map(i => card(i)).join(""))}
+    </div></div>`;
+}
+const SHELF_NOTE = {};
+function fillShelfD(appId) {
+  const items = SHELF[appId];
+  const shelf = document.querySelector("#D [data-shelf]");
+  if (!items) { shelf.innerHTML = ""; return null; }
+  shelf.innerHTML = items.map(it => card(it)).join("");
+  return items[0];
+}
+
+// ---- E: hero + two panels ------------------------------------------------------------------------
+function renderE() {
+  const vid = it => { const i = ref(it); return `<div class="vid focusable" data-item="${i}">${art(it, 15, `<span class="duration">${it.dur}</span>`)}<div><div class="t">${esc(it.title)}</div><div class="s">${esc(it.sub)}</div></div></div>`; };
+  document.getElementById("E").innerHTML = `${bgBlock("left")}${topbar}${heroBlock}
+    <div class="panels">
+      <div class="panel glass">
+        ${row(`${badge("jellyfin")} &nbsp;Seguir viendo`, "", "w169", RESUME.map(i => card(i, null, 24)).join(""))}
+        ${row("Agregado recientemente", "", "poster", LATEST.concat(LATEST.slice(0, 2)).map(i => card(i, "poster", 24)).join(""))}
+      </div>
+      <div class="panel glass">
+        ${row(`${badge("youtube")}`, "nuevo en tus suscripciones", "", "").replace('<div class="track"></div>', "")}
+        <div class="vids">${YT.concat(YT.slice(0, 1)).slice(0, 6).map(vid).join("")}</div>
+      </div>
+    </div>
+    <div class="dock"><div class="track">${APPS.map(appTile).join("")}</div></div>`;
+}
+
+// ---- F: ambient wallpaper, clock, glass tray -------------------------------------------------------
+function renderF() {
+  document.getElementById("F").innerHTML = `${bgBlock("soft")}${topbar}
+    <div class="ambient"><div class="big" data-clock></div><div class="date" data-date></div><div class="credit" data-wall-name></div></div>
+    ${heroBlock}
+    <div class="tray glass">
+      ${row("En curso", "Jellyfin y YouTube", "", inProgress.map(i => card(i, null, 24)).join(""))}
+      ${row("Nuevo", "agregado a Jellyfin y subido por tus canales", "", mixedNew.map(i => card(i, null, 24)).join(""))}
+      ${row("Apps", "", "", APPS.map(appTile).join(""))}
+    </div>`;
+}
+
+// ---- G: rotating feature ---------------------------------------------------------------------------
+const FEATURED = [RESUME[0], YT[0], LATEST[0], RESUME[3]];
+let featuredIndex = 0;
+function renderG() {
+  document.getElementById("G").innerHTML = `${bgBlock("left")}${topbar}${heroBlock}
+    <div class="dots" data-dots>${FEATURED.map(() => "<i></i>").join("")}</div>
+    <div class="lower" data-lower>
+      ${row("Apps", "", "", APPS.map(appTile).join(""))}
+      ${row("Seguir viendo", "Jellyfin", "w169", RESUME.map(i => card(i, null, 34)).join(""))}
+      ${row("Nuevo en tus suscripciones", "YouTube", "w169", YT.map(i => card(i, null, 34)).join(""))}
+      ${row("Agregado recientemente", "Jellyfin", "poster", LATEST.map(i => card(i, "poster")).join(""))}
+    </div>`;
+}
+function rotateG() {
+  if (current !== "G") return;
+  const f = focused.G;
+  if (f && f.dataset.item) return; // a focused card owns the hero
+  featuredIndex = (featuredIndex + 1) % FEATURED.length;
+  showFeatured();
+}
+function showFeatured() {
+  const layout = document.getElementById("G");
+  setHero(layout, FEATURED[featuredIndex]);
+  layout.querySelectorAll("[data-dots] i").forEach((d, i) => d.classList.toggle("on", i === featuredIndex));
+}
+
+// ---- Background, hero, focus -----------------------------------------------------------------------
+function setBg(layout, item) {
+  const a = layout.querySelector("[data-bg-a]"), b = layout.querySelector("[data-bg-b]");
+  const showA = b.style.opacity !== "0";
+  const next = showA ? a : b, prev = showA ? b : a;
+  const wall = !item || item.wall;
+  next.style.background = wall ? wallUrl(WALLS[wallIndex]) : grad(item.k);
+  next.style.backgroundSize = "cover";
+  next.style.opacity = "1"; prev.style.opacity = "0";
+  layout.querySelector("[data-bg-mark]").textContent = wall ? "" : item.title;
+  layout.querySelectorAll("[data-wall-name]").forEach(e => e.textContent = `Fondo: ${WALLS[wallIndex].name}`);
+}
+function setHero(layout, item) {
+  setBg(layout, item);
+  const q = s => layout.querySelector(s);
+  if (!q("[data-hero-title]")) return;
+  const hero = q(".hero");
+  if (!item || item.wall) { hero.style.opacity = layout.id === "F" ? "" : "0"; return; }
+  hero.style.opacity = "";
+  q("[data-hero-badge]").innerHTML = badge(item.src);
+  q("[data-hero-title]").textContent = item.title;
+  q("[data-hero-meta]").textContent = item.meta;
+  q("[data-hero-desc]").textContent = item.desc;
+  q("[data-hero-action]").textContent = "▶ " + item.action;
+  q("[data-hero-progress]").innerHTML = item.p > 0 ? `<div class="progress" style="width:240px"><b style="width:${item.p * 100}%"></b></div>` : "";
+  q("[data-hero-left]").textContent = item.left || "";
+}
+
+let current = "D";
+const focused = {};
+const layoutEl = () => document.getElementById(current);
+
+function focus(el) {
+  const layout = layoutEl();
+  layout.querySelectorAll(".focused").forEach(x => x.classList.remove("focused"));
+  el.classList.add("focused");
+  focused[current] = el;
+  const item = el.dataset.item ? ITEMS[+el.dataset.item] : null;
+  if (current === "D" && el.dataset.app) setHero(layout, fillShelfD(el.dataset.app) || homeItem);
+  else if (current === "F") { layout.classList.toggle("has-item", !!item); setHero(layout, item || homeItem); }
+  else if (current === "G" && !item) showFeatured();
+  else setHero(layout, item || homeItem);
+  keepVisible(el);
+}
+
+function keepVisible(el) {
+  const track = el.closest(".track");
+  if (track && track.children.length > 1) {
+    const idx = [...track.children].indexOf(el);
+    const step = track.children[0].getBoundingClientRect().width / scale + 26;
+    track.style.transform = `translateX(${-Math.max(0, idx - 3) * step}px)`;
+  }
+  if (current === "D") {
+    const below = el.closest(".below .row");
+    const page = layoutEl().querySelector("[data-page]");
+    page.style.transform = below ? `translateY(${-(below.offsetTop + 1060 - 140)}px)` : "";
+  }
+  if (current === "G") {
+    const lower = layoutEl().querySelector("[data-lower]");
+    const r = el.closest(".row");
+    const all = [...lower.children];
+    const i = r ? all.indexOf(r) : 0;
+    lower.style.transform = `translateY(${-all.slice(0, Math.max(0, i - 1)).reduce((h, x) => h + x.offsetHeight + 40, 0)}px)`;
+  }
+}
+
+function move(dir) {
+  const layout = layoutEl();
+  const cur = focused[current];
+  const c = cur.getBoundingClientRect();
+  const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const e of layout.querySelectorAll(".focusable")) {
+    if (e === cur || e.offsetParent === null) continue;
+    const r = e.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+    if (!{ left: dx < -4, right: dx > 4, up: dy < -20, down: dy > 20 }[dir]) continue;
+    const horiz = dir === "left" || dir === "right";
+    const score = (horiz ? Math.abs(dx) : Math.abs(dy)) + (horiz ? Math.abs(dy) : Math.abs(dx)) * 2.5;
+    if (score < bestScore) { bestScore = score; best = e; }
+  }
+  if (best) focus(best);
+}
+
+const NOTES = {
+  D: `<h2>D · Top Shelf + filas</h2><ul><li>Lo del A tal cual: info grande arriba, contenido de la app enfocada, fila de apps.</li>
+    <li>Arranca en YouTube, lo que más usás.</li><li>Bajando desde las apps aparecen las filas del B: <b>Agregado recientemente</b> y más de YouTube.</li>
+    <li>En una app sin contenido (Spotify, 9Now…) se ve el wallpaper.</li></ul>`,
+  E: `<h2>E · Jellyfin | YouTube</h2><ul><li>Todo de un vistazo: tus dos fuentes principales lado a lado, sin bajar.</li>
+    <li>Izquierda: seguir viendo y agregados de Jellyfin. Derecha: los videos nuevos de tus canales con título y duración.</li>
+    <li>Arriba la info y la imagen de lo enfocado; las apps quedan como una tira chica abajo.</li></ul>`,
+  F: `<h2>F · Ambiente</h2><ul><li>En reposo: wallpaper a pantalla completa con reloj grande, como un cuadro.</li>
+    <li>Abajo, un panel de vidrio con lo que tenés en curso (Jellyfin y YouTube mezclados), lo nuevo y las apps.</li>
+    <li>Al enfocar una card, el wallpaper cambia a la imagen de esa peli, serie o video y aparece su info. <kbd>W</kbd> cambia de wallpaper.</li></ul>`,
+  G: `<h2>G · Destacado rotativo</h2><ul><li>Arriba un destacado que rota solo cada pocos segundos: lo que estabas viendo, un video nuevo, una peli recién agregada.</li>
+    <li>Abajo: apps, seguir viendo, YouTube y agregados, en filas que suben al bajar.</li>
+    <li>Cuando enfocás una card, el destacado muestra esa.</li></ul>`,
+};
+const WALL_NOTE = `<h2>Wallpaper: de dónde puede salir</h2><ul><li>Fondos (backdrops) de tu biblioteca de Jellyfin, al azar.</li>
+  <li>Una carpeta de fotos tuyas en Ginebra.</li><li>La imagen del día de Bing o de la NASA.</li></ul>
+  <h2>Fuentes</h2><ul><li>Jellyfin y YouTube: datos reales (API).</li><li>Prime, Disney+, Max: sin acceso a su «seguir viendo»; solo fijados con link directo.</li></ul>`;
+
+function show(id) {
+  current = id;
+  document.querySelectorAll(".layout").forEach(l => l.classList.toggle("active", l.id === id));
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.layout === id));
+  const layout = layoutEl();
+  const start = focused[id] || {
+    D: layout.querySelector('[data-app="youtube"]'), E: layout.querySelector(".card"),
+    F: layout.querySelector(".app"), G: layout.querySelector(".app"),
+  }[id];
+  requestAnimationFrame(() => focus(start));
+  document.getElementById("notes").innerHTML = NOTES[id] + WALL_NOTE;
+}
+
+let scale = 1;
+function fit() { scale = document.getElementById("viewport").clientWidth / 1920; document.getElementById("stage").style.transform = `scale(${scale})`; }
+function tick() {
+  const now = new Date();
+  document.querySelectorAll("[data-clock]").forEach(e => e.textContent = now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }));
+  document.querySelectorAll("[data-date]").forEach(e => e.textContent = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" }));
+}
+renderD(); renderE(); renderF(); renderG();
+fit(); tick(); setInterval(tick, 10000); setInterval(rotateG, 5000);
+addEventListener("resize", () => { fit(); keepVisible(focused[current]); });
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => show(t.dataset.layout));
+addEventListener("keydown", e => {
+  const dir = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" }[e.key];
+  if (dir) { e.preventDefault(); move(dir); }
+  if (["4", "5", "6", "7"].includes(e.key)) show("DEFG"[+e.key - 4]);
+  if (e.key === "w" || e.key === "W") { wallIndex = (wallIndex + 1) % WALLS.length; focus(focused[current]); }
+});
+const hash = location.hash.slice(1);
+show("DEFG".includes(hash) && hash ? hash : "D");
+</script>
+</body>
+</html>
