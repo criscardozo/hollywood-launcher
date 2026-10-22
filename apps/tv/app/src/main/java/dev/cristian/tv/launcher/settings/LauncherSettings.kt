@@ -9,7 +9,7 @@ import dev.cristian.tv.launcher.jellyfin.Player
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlin.random.Random
+import java.security.SecureRandom
 
 /**
  * Everything the launcher is told from outside: credentials typed into the settings page on the LAN,
@@ -55,7 +55,8 @@ class LauncherSettings(private val context: Context) {
     /** The code the settings page asks for, shown on the TV. Created once. */
     suspend fun adminToken(): String {
         current().adminToken.takeIf { it.isNotBlank() }?.let { return it }
-        val token = Random.nextInt(100_000, 1_000_000).toString()
+        // A CSPRNG, not kotlin.random: the code guards the settings API on the LAN (the server rate-limits guesses).
+        val token = (SecureRandom().nextInt(900_000) + 100_000).toString()
         context.dataStore.edit { it[Keys.adminToken] = token }
         return token
     }

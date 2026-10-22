@@ -58,7 +58,8 @@ abajo a la derecha, que se corre unos píxeles cada minuto. Sin Jellyfin, solo e
 Todo lo que el launcher necesita saber de afuera se carga desde una **página web que sirve el propio
 launcher** en la red de casa: `http://192.168.0.4:8765` (en el emulador, `http://localhost:8765` con
 `adb forward tcp:8765 tcp:8765`). Cada cambio pide el código de 6 dígitos que se ve en la tele en
-**Todas las apps → Configuración del inicio**. Ninguna clave queda en el código ni en git.
+**Todas las apps → Configuración del inicio** (generado con `SecureRandom`; después de 10 códigos
+equivocados la API se bloquea 5 minutos). Ninguna clave queda en el código ni en git.
 
 Desde la página:
 

@@ -20,9 +20,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
 
 const val ADMIN_PORT = 8765
 private const val TAG = "AdminServer"
+private const val MAX_FAILURES = 10
+private const val LOCKOUT_MS = 5 * 60_000L
 
 @Serializable private data class GoogleBody(val clientId: String, val clientSecret: String)
 @Serializable private data class SeerrBody(val url: String, val apiKey: String)
@@ -59,6 +63,10 @@ class AdminServer(
 
     private val json: Json = Http.json
 
+    // Six digits are guessable only without a limit: 10 wrong codes lock the API for 5 minutes.
+    private val failures = AtomicInteger(0)
+    @Volatile private var lockedUntilMs = 0L
+
     fun startQuietly() {
         try {
             start(SOCKET_READ_TIMEOUT, true)
@@ -82,8 +90,20 @@ class AdminServer(
         }
         if (!uri.startsWith("/api/")) return reply(Response.Status.NOT_FOUND, Error("No existe"))
 
+        if (System.currentTimeMillis() < lockedUntilMs) {
+            return reply(Response.Status.FORBIDDEN, Error("Demasiados intentos: probá de nuevo en unos minutos"))
+        }
         val token = runBlocking { settings.adminToken() }
-        if (session.headers["x-token"] != token) return reply(Response.Status.UNAUTHORIZED, Error("Código incorrecto"))
+        val given = session.headers["x-token"].orEmpty()
+        if (!MessageDigest.isEqual(given.toByteArray(), token.toByteArray())) {
+            if (failures.incrementAndGet() >= MAX_FAILURES) {
+                failures.set(0)
+                lockedUntilMs = System.currentTimeMillis() + LOCKOUT_MS
+                Log.w(TAG, "Settings API locked after $MAX_FAILURES wrong codes")
+            }
+            return reply(Response.Status.UNAUTHORIZED, Error("Código incorrecto"))
+        }
+        failures.set(0)
 
         val method = session.method
         return runBlocking {
