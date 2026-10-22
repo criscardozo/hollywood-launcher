@@ -31,5 +31,5 @@ ios-project:
 	cd apps/ios && xcodegen generate
 
 ios-build: ios-project
-	cd apps/ios && xcodebuild -project TVRemote.xcodeproj -scheme TVRemote \
+	cd apps/ios && xcodebuild -project HollywoodRemote.xcodeproj -scheme HollywoodRemote \
 		-destination 'generic/platform=iOS Simulator' -quiet build

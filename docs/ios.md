@@ -38,17 +38,36 @@ Jellyfin en la tele"), widget y Live Activity con lo que se está reproduciendo.
 
 ## Técnica
 
-- SwiftUI, iOS 17+, proyecto generado con XcodeGen (`apps/ios/project.yml`), así el `.xcodeproj`
-  no va a git.
-- Red: Network.framework (Bonjour con `NWBrowser`, TLS con identidad de cliente).
-- Mensajes: protobuf (`SwiftProtobuf`), con las definiciones del protocolo que usan las librerías
-  abiertas (`androidtvremote2` de Home Assistant, `androidtv-remote` de Node).
-- Certificado de cliente: clave RSA 2048 en el Llavero y certificado autofirmado con
-  `swift-certificates`. Es RSA porque el código de emparejamiento se valida con el módulo y el
-  exponente de las dos claves.
-- Alternativa evaluada: el paquete `AndroidTVRemoteControl` (MIT). Su documentación solo cubre
-  emparejar y mandar teclas; hacerlo propio es más trabajo pero da control sobre lo que la tele avisa.
-- `Info.plist`: `NSLocalNetworkUsageDescription` y `NSBonjourServices` (`_androidtvremote2._tcp`).
+- SwiftUI, iOS 17+, proyecto generado con XcodeGen (`apps/ios/project.yml`); el `.xcodeproj` no va a git.
+- El protocolo está en **`RemoteKit`** (`apps/ios/RemoteKit`), un paquete Swift propio:
+  - protobuf mínimo escrito a mano, con los números de campo de `androidtvremote2` (Home Assistant);
+  - identidad del cliente: clave RSA 2048 y certificado X.509 autofirmado armado a mano en DER,
+    guardados en el Llavero (solo este dispositivo);
+  - **TLS con SwiftNIO SSL, no con Network.framework.** El certificado del servicio de control remoto
+    (en el emulador y en la tele real) tiene clave RSA pero dice estar firmado con
+    `ecdsa-with-SHA256`, y la pila TLS de Apple no lo puede leer: falla con -9808 ("bad certificate
+    format") antes de llegar a cualquier verificación propia. BoringSSL (el de NIO) lo acepta con la
+    verificación apagada; la confianza la da el emparejamiento.
+- Búsqueda de la tele por Bonjour (`_androidtvremote2._tcp`), resuelta a IPv4 (por IPv6 da una
+  dirección `fe80::` que no sirve sin la interfaz).
+- `atvremote`: cliente de línea de comandos para la Mac (`swift run atvremote …` en `apps/ios/RemoteKit`)
+  para probar el protocolo sin el iPhone. Usa una identidad en `.local/atvremote.crt` y `.key`:
+
+  ```bash
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout .local/atvremote.key \
+    -out .local/atvremote.crt -days 7300 -subj "/CN=atvremote"
+  ```
+
+## Estado
+
+- Probado contra el emulador de Google TV: TLS con el certificado raro y **emparejamiento completo**
+  (el servicio acepta el secreto).
+- El puerto de comandos (6466) del emulador no acepta conexiones ni siquiera a `androidtvremote2`
+  después de emparejar: es una limitación del emulador. Teclas, apps, texto y estado (app en frente,
+  volumen, encendido) se prueban con la tele.
+- La app compila sin advertencias y corre en el simulador; encuentra a la tele real por Bonjour.
+- `-demo YES` como argumento de arranque muestra el control conectado con datos inventados.
+- Abrir apps usa `market://launch?id=<paquete>` (YouTube, su URL): falta confirmarlo en la tele.
 
 ## Firma
 
@@ -58,9 +77,8 @@ datos con un widget); se verifica cuando se llegue a los extras. Nada de esto pa
 
 ## Orden
 
-1. Esqueleto: pantallas con un cliente simulado. ← acá
-2. Remote v2: descubrimiento, emparejamiento, teclas. Se prueba primero contra el emulador de
-   Google TV, si trae el servicio de Remote v2; si no, contra la tele.
-3. Abrir apps y teclado.
-4. API del launcher: apps con íconos, Jellyfin.
-5. Extras de iOS.
+1. ~~Esqueleto y pantallas.~~
+2. ~~Remote v2: descubrimiento y emparejamiento~~ (probado en el emulador); teclas y estado (falta la tele). ← acá
+3. Abrir apps y teclado: falta confirmar en la tele.
+4. API del launcher: apps con íconos, fijados y Jellyfin desde el celular.
+5. Extras de iOS: Centro de Control, atajos de Siri, widget.
