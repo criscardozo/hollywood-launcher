@@ -9,12 +9,14 @@ import NIOTLS
 ///
 /// TLS goes through SwiftNIO SSL, not Network.framework: the TV's certificate has an RSA key but claims
 /// an ecdsa-with-SHA256 signature, and Apple's stack refuses to parse it (-9808, "bad certificate
-/// format") before any verify block runs. Seen on the emulator and on the real TV. The certificate is
-/// not verified: trust comes from pairing, and the TV checks ours on every connection.
+/// format") before any verify block runs. Seen on the emulator and on the real TV. The certificate is not
+/// chain-verified (it is self-signed); instead, after pairing its key is pinned: [pinnedFingerprint] must
+/// match, or the connection is dropped. The TV checks ours on every connection too.
 final class Channel: @unchecked Sendable {
     private let host: String
     private let port: UInt16
     private let identity: ClientIdentity
+    private let pinnedFingerprint: String?
     private var channel: NIOCore.Channel?
     private let continuation: AsyncThrowingStream<Data, Error>.Continuation
     private(set) var serverPublicNumbers: RSAPublicNumbers?
@@ -22,10 +24,11 @@ final class Channel: @unchecked Sendable {
     /// Incoming messages, one Data per protobuf message, until the connection closes.
     let messages: AsyncThrowingStream<Data, Error>
 
-    init(host: String, port: UInt16, identity: ClientIdentity) {
+    init(host: String, port: UInt16, identity: ClientIdentity, pinnedFingerprint: String? = nil) {
         self.host = host
         self.port = port
         self.identity = identity
+        self.pinnedFingerprint = pinnedFingerprint
         (messages, continuation) = AsyncThrowingStream.makeStream()
     }
 
@@ -60,6 +63,12 @@ final class Channel: @unchecked Sendable {
                 return try ssl.peerCertificate?.extractPublicKey().toSPKIBytes()
             }.get()
             serverPublicNumbers = spki.flatMap { RSAPublicNumbers(spki: Data($0)) }
+            if let pinnedFingerprint, serverPublicNumbers?.fingerprint != pinnedFingerprint {
+                throw PinMismatch()
+            }
+        } catch is PinMismatch {
+            close()
+            throw RemoteError.connection("la tele no coincide con la emparejada: emparejá de nuevo")
         } catch {
             handshake.fail(error)
             close()
@@ -79,6 +88,8 @@ final class Channel: @unchecked Sendable {
         channel?.close(promise: nil)
     }
 }
+
+private struct PinMismatch: Error {}
 
 /// Splits the TLS stream into messages: each is preceded by its length as a varint, and either may
 /// arrive in pieces.

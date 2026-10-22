@@ -47,7 +47,10 @@ Jellyfin en la tele"), widget y Live Activity con lo que se está reproduciendo.
     (en el emulador y en la tele real) tiene clave RSA pero dice estar firmado con
     `ecdsa-with-SHA256`, y la pila TLS de Apple no lo puede leer: falla con -9808 ("bad certificate
     format") antes de llegar a cualquier verificación propia. BoringSSL (el de NIO) lo acepta con la
-    verificación apagada; la confianza la da el emparejamiento.
+    verificación de cadena apagada (el certificado es autofirmado). En su lugar, al emparejar se guarda
+    la huella SHA-256 de la clave pública de la tele y cada conexión posterior tiene que presentar la
+    misma; si no coincide, la app corta y pide emparejar de nuevo. El emparejamiento en sí confía en la
+    primera tele que responde: el código en pantalla es lo que confirma que es la correcta.
 - Búsqueda de la tele por Bonjour (`_androidtvremote2._tcp`), resuelta a IPv4 (por IPv6 da una
   dirección `fe80::` que no sirve sin la interfaz).
 - `atvremote`: cliente de línea de comandos para la Mac (`swift run atvremote …` en `apps/ios/RemoteKit`)

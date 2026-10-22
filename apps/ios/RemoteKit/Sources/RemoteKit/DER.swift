@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 
@@ -85,6 +86,14 @@ enum DER {
 struct RSAPublicNumbers: Equatable {
     let modulus: Data
     let exponent: Data
+
+    /// SHA-256 of modulus and exponent, hex: what gets pinned after pairing.
+    var fingerprint: String {
+        var hash = SHA256()
+        hash.update(data: modulus)
+        hash.update(data: exponent)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
 
     /// From SecKeyCopyExternalRepresentation of an RSA public key: PKCS#1 SEQUENCE { n, e }.
     init?(pkcs1 der: Data) {

@@ -56,9 +56,14 @@ final class RemoteModel {
     func connectIfNeeded() async {
         guard !demo, let host, phase != .connected, phase != .pairing, phase != .enteringCode else { return }
         phase = .connecting
+        guard let tvKey = defaults.string(forKey: "tvKey") else {
+            phase = .failed("Falta emparejar con la tele.")
+            return
+        }
         do {
             let identity = try ClientIdentity.keychain()
-            let session = RemoteSession(host: host, identity: identity, deviceName: UIDevice.current.name)
+            let session = RemoteSession(host: host, identity: identity, pinnedFingerprint: tvKey,
+                                        deviceName: UIDevice.current.name)
             try await session.connect()
             self.session = session
             state = session.current
@@ -107,7 +112,7 @@ final class RemoteModel {
         do {
             ClientIdentity.deleteKeychain()
             let identity = try ClientIdentity.keychain()
-            try await Pairing.pair(host: host, identity: identity, clientName: UIDevice.current.name) { [weak self] in
+            let tvKey = try await Pairing.pair(host: host, identity: identity, clientName: UIDevice.current.name) { [weak self] in
                 try await withCheckedThrowingContinuation { continuation in
                     Task { @MainActor in
                         self?.codeContinuation = continuation
@@ -119,6 +124,8 @@ final class RemoteModel {
             tvName = name
             defaults.set(host, forKey: "host")
             defaults.set(name, forKey: "tvName")
+            // Every later connection must present this same key (no impostor on the LAN).
+            defaults.set(tvKey, forKey: "tvKey")
             phase = .connecting
             await connectIfNeeded()
         } catch {
@@ -144,6 +151,7 @@ final class RemoteModel {
         ClientIdentity.deleteKeychain()
         defaults.removeObject(forKey: "host")
         defaults.removeObject(forKey: "tvName")
+        defaults.removeObject(forKey: "tvKey")
         host = nil
         tvName = nil
         state = RemoteState()

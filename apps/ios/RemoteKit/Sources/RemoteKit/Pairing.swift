@@ -8,13 +8,15 @@ public enum Pairing {
     public static let port: UInt16 = 6467
 
     /// - Parameter code: asked once the TV is showing it; return the six characters the user typed.
+    /// - Returns: the TV's key fingerprint, to pin on every later connection (RemoteSession).
+    @discardableResult
     public static func pair(
         host: String,
         port: UInt16 = port,
         identity: ClientIdentity,
         clientName: String,
         code: @Sendable () async throws -> String
-    ) async throws {
+    ) async throws -> String {
         let channel = Channel(host: host, port: port, identity: identity)
         try await channel.open()
         defer { channel.close() }
@@ -44,6 +46,7 @@ public enum Pairing {
         let secret = try secret(code: try await code(), client: identity.publicNumbers, server: server)
         channel.send(Polo.secret(secret))
         try await expect({ if case .secretAck = $0 { true } else { false } }, "código")
+        return server.fingerprint
     }
 
     static func secret(code: String, client: RSAPublicNumbers, server: RSAPublicNumbers) throws -> Data {

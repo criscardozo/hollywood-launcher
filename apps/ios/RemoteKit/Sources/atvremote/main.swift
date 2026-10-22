@@ -21,6 +21,9 @@ guard let command = args.first, args.count >= 2 else {
 let host = args[args.startIndex + 1]
 let rest = Array(args.dropFirst(2))
 let env = ProcessInfo.processInfo.environment
+/// The TV's key fingerprint saved when pairing; later connections must match it.
+let pinPath = env["ATV_PIN"] ?? ".local/atvremote.pin"
+
 func identity() throws -> ClientIdentity {
     try ClientIdentity.pem(
         certificate: URL(fileURLWithPath: env["ATV_CERT"] ?? ".local/atvremote.crt"),
@@ -33,14 +36,16 @@ func run() async throws {
     switch command {
     case "pair":
         let given = rest.first
-        try await Pairing.pair(host: host, identity: id, clientName: "atvremote (Mac)") {
+        let tvKey = try await Pairing.pair(host: host, identity: id, clientName: "atvremote (Mac)") {
             if let given { return given }
             print("Código que muestra la tele: ", terminator: "")
             return readLine() ?? ""
         }
-        print("emparejado")
+        try tvKey.write(toFile: pinPath, atomically: true, encoding: .utf8)
+        print("emparejado; clave de la tele en \(pinPath)")
     case "key", "launch", "text", "watch":
-        let session = RemoteSession(host: host, identity: id, deviceName: "atvremote (Mac)")
+        let pin = try? String(contentsOfFile: pinPath, encoding: .utf8)
+        let session = RemoteSession(host: host, identity: id, pinnedFingerprint: pin, deviceName: "atvremote (Mac)")
         try await session.connect()
         print("conectado: \(session.current)")
         switch command {

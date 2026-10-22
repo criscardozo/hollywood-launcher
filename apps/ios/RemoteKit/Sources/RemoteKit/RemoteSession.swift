@@ -33,9 +33,10 @@ public final class RemoteSession: @unchecked Sendable {
     /// Every change of [RemoteState], starting with the first one after connecting.
     public let updates: AsyncStream<RemoteState>
 
-    public init(host: String, port: UInt16 = port, identity: ClientIdentity, deviceName: String = "Hollywood Remote",
-                features: RemoteFeatures = .standard) {
-        channel = Channel(host: host, port: port, identity: identity)
+    /// - Parameter pinnedFingerprint: what Pairing.pair returned; the TV's key must still match it.
+    public init(host: String, port: UInt16 = port, identity: ClientIdentity, pinnedFingerprint: String?,
+                deviceName: String = "Hollywood Remote", features: RemoteFeatures = .standard) {
+        channel = Channel(host: host, port: port, identity: identity, pinnedFingerprint: pinnedFingerprint)
         self.features = features
         self.deviceName = deviceName
         var cont: AsyncStream<RemoteState>.Continuation!
