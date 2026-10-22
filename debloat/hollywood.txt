@@ -1,0 +1,82 @@
+# Hollywood: FFALCON 75" U65 Google TV (FF75U65), 192.168.0.4, wired.
+# TCL G10 board, product G10_4K_GB_NF_32BIT, build STT2.230203.001 (AS12), Android 12 (SDK 31),
+# Realtek rtd6748, armeabi-v7a only, 1.8 GB RAM. Read from the TV on 2026-10-22 (baseline/2026-10-22/).
+#
+# Same product and build as cleanyourtv's examples/tcl-g10-google-tv (confirmed there on a TCL 55P6K),
+# which is where this list started. Differences from that list are noted inline.
+#
+# Phase A only: nothing here touches Home. The packages that hand Home to our launcher live in
+# hollywood-launcher.txt and go only after apps/tv is installed and opened by hand.
+#
+# Apply:   tools/debloat.sh apply debloat/hollywood.txt
+# Undo:    tools/debloat.sh restore debloat/hollywood.txt
+# Check:   tools/debloat.sh status debloat/hollywood.txt
+# Everything is DISABLED (pm disable-user), not uninstalled. Comment out a line to keep it.
+#
+# Factory state: nothing was disabled (`pm list packages -d` empty). Unlike the US G10 unit,
+# Samba TV ACR, ttvs and logkit all ship ENABLED here.
+#
+# NEVER DISABLE (the TV depends on them, or we do):
+#   com.tcl.tv, com.tcl.tvinput          live TV and every HDMI input
+#   com.tcl.suspension                   the Input picker (handles com.android.tv.action.VIEW_INPUTS)
+#   com.tcl.dashboard, com.tcl.systemserver, com.tcl.providers.config, com.tcl.initsetup,
+#   com.tcl.useragreement, com.tcl.factory.view, com.tvos, com.realtek.*
+#   com.tcl.autopair                     Bluetooth remote pairing
+#   com.tcl.globalkeyoverlay             the remote's Netflix/Prime/YouTube/Disney+ hotkeys
+#   com.tcl.inputmethod.international    the active keyboard (com.google.android.inputmethod.latin is the fallback)
+#   com.tcl.hearaid                      sound and accessibility settings
+#   com.tcl.airplay2, com.realtek.airplay2   AirPlay, which is how the house casts (iPhones)
+#   com.google.android.tv.remote.service Remote v2 (ports 6466/6467): the iOS app depends on it.
+#                                        cleanyourtv's G10 list disables it; we must not.
+#   com.android.tv.settings, com.android.vending, com.google.android.gms, com.google.android.gsf,
+#   com.google.android.webview, com.android.providers.tv
+#
+# Wait at least 10 seconds after applying before any reboot: PackageManager writes the new states
+# to disk after a short delay, and a reboot inside that window brings packages back enabled.
+
+# Tracking and analytics
+tv.samba.ssm.ui                        # Samba TV ACR: recognises what is on screen, HDMI included
+com.tcl.ttvs                           # TCL analytics (BI), Alexa core, T-Cast. Also the OTA path on G10: off = updates frozen
+com.tcl.logkit                         # log capture and upload
+com.tcl.usercenter                     # TCL account sign-in nags
+com.google.android.feedback
+
+# TCL content, ads and promos
+com.tcl.waterfall.overseas             # TCL Channel (the remote's TCL CHANNEL key stops doing anything)
+com.tcl.channelplus                    # TCL Live FAST channels, also removes them from Live TV
+com.tcl.tv.tclhome_passive             # pushes TCL content to the home screen at boot
+com.tcl.partnercustomizer              # TCL tweaks to Google TV home rows
+com.tcl.interactive                    # TCL TIAS background service
+com.tcl.messagebox                     # TCL push messages and promos
+android.autoinstalls.config.google.gtvpai   # silently installs partner apps
+com.google.android.partnersetup        # partner attribution (not in the G10 list; from tcl-c755)
+
+# Retail demo / hotel mode
+com.tcl.exhibit
+com.tcl.esticker
+com.tcl.hotelmenu
+
+# Preloaded apps and services nobody uses here
+com.tcl.guard                          # TGuard memory "cleaner"
+com.tcl.ocean.instructions             # e-manual
+com.tcl.repairguide
+com.tcl.smartalexa                     # Alexa
+com.tcl.magiconnectfree                # TCL T-Cast phone mirroring
+com.tcl.miracast                       # Miracast mirroring (AirPlay stays)
+com.tcl.UpdatePeripheral               # TCL soundbar firmware; the soundbar here is a JBL
+com.google.android.play.games
+com.google.android.marvin.talkback
+
+# Cristian's decisions (2026-10-22)
+com.google.android.apps.mediashell     # Chromecast: not used, the house casts with AirPlay
+com.google.android.katniss             # Google Assistant: not wanted (~54 MB resident). The mic key does nothing afterwards
+com.netflix.ninja                      # Netflix, with the next line (the remote's NETFLIX key stops doing anything)
+com.netflix.tokenmanager
+au.com.stan.and                        # Stan
+com.google.android.youtube.tvmusic     # YouTube Music
+com.google.android.videos              # Google TV / Play Movies (probably the remote's film key)
+
+# OPEN: ask before enabling these lines
+# com.tcl.gamebar                      # game mode / VRR overlay: is the PlayStation plugged into this TV?
+# com.tcl.ui_mediaCenter               # USB media player and photo viewer
+# com.tcl.t_solo                       # T-Solo: Bluetooth headphones while the speakers stay off

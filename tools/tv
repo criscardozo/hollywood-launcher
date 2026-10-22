@@ -1,0 +1,25 @@
+#!/bin/bash
+# Run adb against the TV through Ginebra. The Mac's adb has no local-network permission, and the TV
+# has authorised Ginebra's key, so every command goes over ssh.
+#
+#   tools/tv shell getprop ro.build.fingerprint
+#   tools/tv install -r app.apk        (the APK is copied to Ginebra first)
+set -euo pipefail
+
+TV_HOST="${TV_HOST:-192.168.0.4:5555}"
+GINEBRA="${GINEBRA:-ginebra}"
+
+ssh_g() { ssh -o ConnectTimeout=8 -o BatchMode=yes "$GINEBRA" "$@"; }
+
+ssh_g "adb connect $TV_HOST >/dev/null"
+
+if [[ "${1:-}" == "install" ]]; then
+  apk="${*: -1}"
+  remote="/tmp/$(basename "$apk")"
+  scp -q "$apk" "$GINEBRA:$remote"
+  args=("${@:1:$#-1}")
+  ssh_g "adb -s $TV_HOST ${args[*]} $remote; rm -f $remote"
+  exit
+fi
+
+ssh_g "adb -s $TV_HOST $(printf '%q ' "$@")"
