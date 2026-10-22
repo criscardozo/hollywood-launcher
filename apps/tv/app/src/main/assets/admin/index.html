@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollywood · configuración</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0c10; --card: #15171d; --line: #262932; --fg: #f2f3f5; --dim: #9aa0aa; --accent: #a95ce0; --ok: #4ade80; --bad: #f87171; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, "Inter", "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  p.lead { color: var(--dim); margin: 0 0 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: var(--dim); margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: #0f1116; color: var(--fg); font: inherit; }
+  button { margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 9px; background: var(--fg); color: #111; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; align-items: end; }
+  .row > * { flex: 1; }
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .pill { padding: 10px 12px; border-radius: 10px; background: #0f1116; border: 1px solid var(--line); }
+  .pill b { display: block; font-size: 13px; color: var(--dim); font-weight: 500; }
+  .on { color: var(--ok); } .off { color: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 14px; }
+  .result { cursor: pointer; border-radius: 10px; overflow: hidden; background: #0f1116; border: 2px solid transparent; }
+  .result.picked { border-color: var(--accent); }
+  .result img { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: #222; }
+  .result div { padding: 6px 8px; font-size: 13px; }
+  .result small { color: var(--dim); }
+  .pin { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .pin img { width: 46px; height: 69px; object-fit: cover; border-radius: 6px; background: #222; }
+  .pin .t { flex: 1; } .pin small { color: var(--dim); display: block; }
+  .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+  .hidden { display: none; }
+  code { background: #0f1116; padding: 1px 6px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hollywood</h1>
+  <p class="lead">Configuración del launcher. Solo funciona en la red de casa.</p>
+
+  <section id="login">
+    <h2>Código</h2>
+    <p>Está en la tele: <b>Todas las apps → Configuración del inicio</b>.</p>
+    <div class="row"><div><label>Código de 6 dígitos</label><input id="token" inputmode="numeric" maxlength="6"></div><div style="flex:0"><button onclick="saveToken()">Entrar</button></div></div>
+    <div class="msg" id="loginMsg"></div>
+  </section>
+
+  <div id="app" class="hidden">
+    <section>
+      <h2>Estado</h2>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section>
+      <h2>YouTube</h2>
+      <p>Cliente OAuth de Google Cloud del tipo <b>TVs and Limited Input devices</b>, con la YouTube Data API v3 habilitada. Después, en la tele: enfocá YouTube → <b>Conectar YouTube</b>.</p>
+      <label>Client ID</label><input id="clientId" placeholder="…apps.googleusercontent.com">
+      <label>Client secret</label><input id="clientSecret" type="password">
+      <button onclick="saveGoogle()">Guardar</button>
+      <div class="msg" id="googleMsg"></div>
+    </section>
+
+    <section>
+      <h2>Seerr</h2>
+      <p>Para buscar series y películas (TMDB). La API key está en Seerr → Settings → General.</p>
+      <label>Dirección</label><input id="seerrUrl" value="http://192.168.0.2:5055">
+      <label>API key</label><input id="seerrKey" type="password">
+      <button onclick="saveSeerr()">Guardar y probar</button>
+      <div class="msg" id="seerrMsg"></div>
+    </section>
+
+    <section>
+      <h2>Fijados</h2>
+      <p>Prime Video, Disney+ y Max no dejan leer qué estás viendo: acá fijás lo que querés tener a mano. El link es el que da el botón <b>Compartir</b> de la app (opcional; sin link, OK abre la app).</p>
+      <div class="row"><div><label>Buscar</label><input id="q" placeholder="Reacher, Andor, The Last of Us…" onkeydown="if(event.key==='Enter')search()"></div><div style="flex:0"><button onclick="search()">Buscar</button></div></div>
+      <div class="grid" id="results"></div>
+      <div id="pinForm" class="hidden">
+        <div class="row">
+          <div><label>Servicio</label><select id="service"><option value="PRIME">Prime Video</option><option value="DISNEY">Disney+</option><option value="MAX">Max</option></select></div>
+          <div><label>Link (opcional)</label><input id="link" placeholder="https://…"></div>
+        </div>
+        <button onclick="pin()">Fijar</button>
+      </div>
+      <div class="msg" id="pinMsg"></div>
+      <div id="pins" style="margin-top:14px"></div>
+    </section>
+
+    <section>
+      <h2>Botones del control</h2>
+      <p>Para darle otro uso a los botones que quedan sin app (Netflix, TCL Channel, películas). Apretá el botón en el control y tocá <b>Ver botones</b>: aparece qué código manda. Necesita el servicio «Botones del control» activado en la tele.</p>
+      <button class="ghost" onclick="recentKeys()">Ver botones apretados</button>
+      <div id="recent" style="margin-top:10px"></div>
+      <div class="row">
+        <div><label>Código de botón</label><input id="keyCode" inputmode="numeric" placeholder="se completa al tocar uno de arriba"></div>
+        <div><label>Abre</label><select id="keyApp"></select></div>
+      </div>
+      <button onclick="mapKey()">Asignar</button>
+      <div class="msg" id="keysMsg"></div>
+      <div id="keys" style="margin-top:12px"></div>
+    </section>
+
+    <section>
+      <h2>Reproductor de Jellyfin</h2>
+      <select id="player" onchange="savePlayer()"><option value="WHOLPHIN">Wholphin</option><option value="JELLYFIN">Jellyfin oficial</option></select>
+      <div class="msg" id="playerMsg"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SERVICES = { PRIME: "Prime Video", DISNEY: "Disney+", MAX: "Max" };
+let picked = null;
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { "X-Token": localStorage.token || "", "Content-Type": "application/json" } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+function msg(id, text, ok = true) { $(id).textContent = text; $(id).className = "msg " + (ok ? "on" : "off"); }
+
+async function saveToken() {
+  localStorage.token = $("token").value.trim();
+  try { await load(); } catch (e) { msg("loginMsg", e.message, false); }
+}
+
+async function load() {
+  const s = await api("/api/status");
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  const pill = (name, on, text) => `<div class="pill"><b>${name}</b><span class="${on ? "on" : "off"}">${text}</span></div>`;
+  $("status").innerHTML =
+    pill("Jellyfin", s.jellyfinConnected, s.jellyfinConnected ? "conectado" : "sin conectar") +
+    pill("YouTube", s.youtubeConnected, s.youtubeConnected ? "conectado" : s.youtubeConfigured ? "falta conectar en la tele" : "falta el client ID") +
+    pill("Seerr", s.seerrConfigured, s.seerrConfigured ? "configurado" : "falta la API key") +
+    pill("Fijados", s.pins > 0, String(s.pins));
+  if (s.seerrUrl) $("seerrUrl").value = s.seerrUrl;
+  $("player").value = s.player;
+  await loadPins();
+  await loadKeys();
+}
+
+async function saveGoogle() {
+  try { await api("/api/google", { method: "POST", body: JSON.stringify({ clientId: $("clientId").value, clientSecret: $("clientSecret").value }) }); msg("googleMsg", "Guardado. Ahora conectá YouTube desde la tele."); load(); }
+  catch (e) { msg("googleMsg", e.message, false); }
+}
+async function saveSeerr() {
+  try { await api("/api/seerr", { method: "POST", body: JSON.stringify({ url: $("seerrUrl").value, apiKey: $("seerrKey").value }) }); msg("seerrMsg", "Funciona."); load(); }
+  catch (e) { msg("seerrMsg", "No funcionó: " + e.message, false); }
+}
+async function savePlayer() {
+  try { await api("/api/player", { method: "POST", body: JSON.stringify({ player: $("player").value }) }); msg("playerMsg", "Guardado."); }
+  catch (e) { msg("playerMsg", e.message, false); }
+}
+
+async function search() {
+  picked = null; $("pinForm").classList.add("hidden");
+  try {
+    const results = await api("/api/search?q=" + encodeURIComponent($("q").value));
+    $("results").innerHTML = results.slice(0, 18).map((r, i) => `
+      <div class="result" data-i="${i}" onclick='pick(${i})'>
+        <img src="${r.posterPath ? "https://image.tmdb.org/t/p/w342" + r.posterPath : ""}" alt="">
+        <div>${esc(r.title || r.name)}<br><small>${esc((r.releaseDate || r.firstAirDate || "").slice(0, 4))} · ${r.mediaType === "tv" ? "Serie" : "Película"}</small></div>
+      </div>`).join("");
+    window.lastResults = results;
+    msg("pinMsg", results.length ? "Elegí uno." : "Sin resultados.");
+  } catch (e) { msg("pinMsg", e.message, false); }
+}
+
+async function pick(i) {
+  picked = window.lastResults[i];
+  document.querySelectorAll(".result").forEach(el => el.classList.toggle("picked", +el.dataset.i === i));
+  $("pinForm").classList.remove("hidden");
+  try {
+    const services = await api(`/api/services?tmdbId=${picked.id}&mediaType=${picked.mediaType}`);
+    if (services.length) { $("service").value = services[0]; msg("pinMsg", "En Australia está en: " + services.map(s => SERVICES[s]).join(", ")); }
+    else msg("pinMsg", "No figura en Prime, Disney+ ni Max en Australia; elegí el servicio igual.", false);
+  } catch (e) { msg("pinMsg", e.message, false); }
+}
+
+async function pin() {
+  if (!picked) return;
+  const body = {
+    tmdbId: picked.id, mediaType: picked.mediaType, title: picked.title || picked.name,
+    year: (picked.releaseDate || picked.firstAirDate || "").slice(0, 4) || null, overview: picked.overview,
+    posterPath: picked.posterPath, backdropPath: picked.backdropPath, source: $("service").value,
+    link: $("link").value.trim() || null,
+  };
+  try { await api("/api/pins", { method: "POST", body: JSON.stringify(body) }); msg("pinMsg", "Fijado."); $("link").value = ""; load(); }
+  catch (e) { msg("pinMsg", e.message, false); }
+}
+
+async function loadPins() {
+  const pins = await api("/api/pins");
+  $("pins").innerHTML = pins.map(p => `
+    <div class="pin">
+      <img src="${p.posterPath ? "https://image.tmdb.org/t/p/w154" + p.posterPath : ""}" alt="">
+      <div class="t">${esc(p.title)}<small>${SERVICES[p.source]}${p.year ? " · " + esc(p.year) : ""}${p.link ? " · con link" : " · abre la app"}</small></div>
+      <button class="ghost" onclick="unpin('${p.id}')">Quitar</button>
+    </div>`).join("");
+}
+async function unpin(id) { await api("/api/pins/" + id, { method: "DELETE" }); load(); }
+
+let appNames = {};
+async function loadKeys() {
+  const apps = await api("/api/apps");
+  appNames = Object.fromEntries(apps.map(a => [a.packageName, a.label]));
+  $("keyApp").innerHTML = apps.map(a => `<option value="${esc(a.packageName)}">${esc(a.label)}</option>`).join("");
+  const keys = await api("/api/keys");
+  $("keys").innerHTML = keys.map(k => `
+    <div class="pin"><div class="t">${esc(k.name)} <small>código ${k.keyCode} → ${esc(appNames[k.packageName] || k.packageName)}</small></div>
+    <button class="ghost" onclick="unmapKey(${k.keyCode})">Quitar</button></div>`).join("");
+}
+async function recentKeys() {
+  const keys = await api("/api/keys/recent");
+  $("recent").innerHTML = keys.length
+    ? keys.map(k => `<button class="ghost" onclick="$('keyCode').value=${k.keyCode}">${esc(k.name)} (${k.keyCode})</button>`).join(" ")
+    : "<small>Nada todavía: ¿está activado el servicio en la tele?</small>";
+}
+async function mapKey() {
+  try { await api("/api/keys", { method: "POST", body: JSON.stringify({ keyCode: +$("keyCode").value, packageName: $("keyApp").value }) }); msg("keysMsg", "Asignado."); loadKeys(); }
+  catch (e) { msg("keysMsg", e.message, false); }
+}
+async function unmapKey(code) { await api("/api/keys/" + code, { method: "DELETE" }); loadKeys(); }
+
+if (localStorage.token) load().catch(() => {});
+</script>
+</body>
+</html>

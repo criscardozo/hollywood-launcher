@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hollywood</string>
+    <string name="screensaver_name">Reloj</string>
+    <string name="remote_keys_name">Botones del control</string>
+    <string name="remote_keys_description">Reasigna los botones de apps del control remoto (Netflix, TCL Channel…) a otras apps.</string>
+</resources>
