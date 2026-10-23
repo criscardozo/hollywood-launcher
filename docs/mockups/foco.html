@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: foco en la fila de apps</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --fg: #f2f3f5; --dim: rgba(242,243,245,.64); --pink: #f472b6; --violet: #a78bfa; --deep: #7c3aed;
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1b1d22; color: var(--fg); font-family: var(--font); padding: 18px 24px 40px; }
+  h1 { font-size: 17px; margin: 0 0 4px; } p.lead { color: var(--dim); margin: 0 0 18px; font-size: 14px; }
+  .opt { margin-bottom: 26px; }
+  .opt h2 { font-size: 15px; margin: 0 0 4px; } .opt p { color: var(--dim); font-size: 13.5px; margin: 0 0 10px; max-width: 900px; }
+  .tv { position: relative; height: 270px; border-radius: 12px; overflow: hidden; padding: 56px 0 0 48px; display: flex; gap: 26px;
+    background: linear-gradient(90deg, rgba(7,8,11,.94), rgba(7,8,11,.6) 50%, rgba(7,8,11,.2)), radial-gradient(80% 120% at 80% 30%, #6a7f93, #2b3440 60%, #0e1116); }
+  .row { display: flex; gap: 26px; align-items: flex-start; }
+  .tile { position: relative; width: 216px; height: 122px; border-radius: 14px; display: grid; place-items: center; font-weight: 800; font-size: 26px; flex: none; transition: transform .15s; }
+  .tile small { position: absolute; left: 0; right: 0; top: calc(100% + 12px); text-align: center; font-size: 16px; font-weight: 600; color: var(--fg); }
+  .yt { background: #fff; color: #ff0000; } .wh { background: #0b1020; color: #a78bfa; } .pv { background: #1a98ff; color: #fff; }
+  .dp { background: linear-gradient(135deg, #0b1f6b, #1a4fd6); color: #fff; } .hb { background: #0a0a0a; color: #fff; } .sb { background: #ffcc00; color: #111; }
+
+  /* Today: 2dp white border, 1.08 */
+  .now .f { transform: scale(1.08); box-shadow: 0 0 0 4px #fff; }
+  /* A: double ring */
+  .a .f { transform: scale(1.1); box-shadow: 0 0 0 4px #07080b, 0 0 0 10px var(--violet), 0 18px 40px rgba(0,0,0,.6); }
+  /* B: dim the rest */
+  .b .tile:not(.f) { opacity: .42; filter: saturate(.5); }
+  .b .f { transform: scale(1.12); box-shadow: 0 0 0 4px #07080b, 0 0 0 9px #fff, 0 22px 50px rgba(0,0,0,.7); }
+  /* C: bar + name */
+  .c .f { transform: scale(1.1) translateY(-6px); box-shadow: 0 22px 44px rgba(0,0,0,.65); }
+  .c .f::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: -22px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pink), var(--violet), var(--deep)); }
+  .c .tile small { display: none; } .c .f small { display: block; top: calc(100% + 34px); }
+  /* D: glow */
+  .d .f { transform: scale(1.12); box-shadow: 0 0 0 4px #07080b, 0 0 0 9px var(--pink), 0 0 46px 14px rgba(167,139,250,.75); }
+  .d .tile:not(.f) { opacity: .7; }
+  .tile small { display: none; }
+  .b .f small, .d .f small { display: block; }
+</style>
+</head>
+<body>
+<h1>Foco en la fila de apps</h1>
+<p class="lead">Cada opción, dos veces: con el foco en un banner blanco (YouTube) y en uno oscuro (Wholphin). Lo mismo se puede aplicar a las tarjetas de las filas de abajo.</p>
+<div id="opts"></div>
+<script>
+const TILES = [["yt", "YouTube"], ["wh", "Wholphin"], ["pv", "prime video"], ["dp", "Disney+"], ["hb", "max"], ["sb", "SBS"]];
+const OPTS = [
+  ["now", "Hoy", "Borde blanco de 2 dp y un 8% más grande. Sobre YouTube, que es blanco, casi no se distingue."],
+  ["a", "A · Doble anillo", "Un anillo oscuro y otro violeta (del «H▶») por fuera: se ve igual sobre blanco, negro o color. Un 10% más grande y con sombra."],
+  ["b", "B · Apagar el resto (recomendada)", "Las demás apps quedan atenuadas y desaturadas; la enfocada, a pleno, más grande, con doble anillo blanco y su nombre debajo. Es lo más fácil de encontrar de un vistazo."],
+  ["c", "C · Barra y nombre", "Sin borde: la enfocada sube un poco y aparece debajo una barra con el degradé del «H▶» y el nombre de la app."],
+  ["d", "D · Resplandor", "Anillo rosa y un halo violeta alrededor, el resto un poco atenuado. El más llamativo."],
+];
+document.getElementById("opts").innerHTML = OPTS.map(([cls, title, text]) => `
+  <div class="opt ${cls}"><h2>${title}</h2><p>${text}</p>
+  <div class="row">${[0, 1].map(f => `<div class="tv"><div class="row">${TILES.slice(0, 3).map(([c, n], i) =>
+    `<div class="tile ${c} ${i === f ? "f" : ""}">${n}<small>${n === "prime video" ? "Prime Video" : n}</small></div>`).join("")}</div></div>`).join("")}</div></div>`).join("");
+</script>
+</body>
+</html>

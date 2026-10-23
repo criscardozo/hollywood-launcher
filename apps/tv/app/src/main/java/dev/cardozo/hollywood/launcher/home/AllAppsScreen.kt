@@ -59,7 +59,9 @@ fun AllAppsScreen(onOpenSettings: () -> Unit, viewModel: HomeViewModel = viewMod
         ) {
             itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
                 Column(Modifier.width(120.dp)) {
-                    AppTile(app, if (index == 0) Modifier.focusRequester(first) else Modifier) { context.launch(app) }
+                    AppTile(app, focused = false, modifier = if (index == 0) Modifier.focusRequester(first) else Modifier, nameBelow = false) {
+                        context.launch(app)
+                    }
                     Text(
                         app.label, fontSize = 10.sp, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 6.dp),

@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -414,13 +415,20 @@ private fun ShelfRow(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
+    var focusedId by remember { mutableStateOf<String?>(null) }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
-        modifier = Modifier.focusRestorer(),
+        modifier = Modifier.focusRestorer().onFocusChanged { if (!it.hasFocus) focusedId = null },
     ) {
         items(items, key = { it.id }) { item ->
-            MediaCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }, showing = item.id == showing?.id) {
+            MediaCard(
+                item,
+                Modifier
+                    .alpha(if (focusedId != null && focusedId != item.id) UNFOCUSED_ALPHA else 1f)
+                    .onFocusChanged { if (it.isFocused) { focusedId = item.id; onFocusItem(item) } },
+                showing = item.id == showing?.id,
+            ) {
                 onPlay(item)
             }
         }
@@ -436,18 +444,21 @@ private fun Dock(
     onOpen: (TvApp) -> Unit,
     onAllApps: () -> Unit,
 ) {
+    var focusedPackage by remember { mutableStateOf<String?>(null) }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
-        modifier = Modifier.focusRestorer(firstFocus),
+        modifier = Modifier.focusRestorer(firstFocus).onFocusChanged { if (!it.hasFocus) focusedPackage = null },
     ) {
         items(apps, key = { it.packageName }) { app ->
             val first = app == apps.first()
             AppTile(
                 app,
-                Modifier
+                focused = focusedPackage == app.packageName,
+                modifier = Modifier
                     .then(if (first) Modifier.focusRequester(firstFocus) else Modifier)
-                    .onFocusChanged { if (it.isFocused) onFocusApp(app) },
+                    .alpha(if (focusedPackage != null && focusedPackage != app.packageName) UNFOCUSED_ALPHA else 1f)
+                    .onFocusChanged { if (it.isFocused) { focusedPackage = app.packageName; onFocusApp(app) } },
             ) { onOpen(app) }
         }
         item { AllAppsTile(onAllApps) }
@@ -457,13 +468,20 @@ private fun Dock(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
+    var focusedId by remember { mutableStateOf<String?>(null) }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
-        modifier = Modifier.focusRestorer(),
+        modifier = Modifier.focusRestorer().onFocusChanged { if (!it.hasFocus) focusedId = null },
     ) {
         items(items, key = { it.id }) { item ->
-            PosterCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }, showing = item.id == showing?.id) {
+            PosterCard(
+                item,
+                Modifier
+                    .alpha(if (focusedId != null && focusedId != item.id) UNFOCUSED_ALPHA else 1f)
+                    .onFocusChanged { if (it.isFocused) { focusedId = item.id; onFocusItem(item) } },
+                showing = item.id == showing?.id,
+            ) {
                 onPlay(item)
             }
         }
