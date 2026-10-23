@@ -47,8 +47,15 @@ las filas del B debajo.
 **Arriba a la derecha:** el clima (temperatura e ícono, de Open-Meteo, para la ciudad elegida en la
 página de configuración; se actualiza cada media hora mientras Home está en pantalla) y la hora.
 
-**Última fila, «Tele»:** Entradas (selector de HDMI de TCL, `com.android.tv.action.VIEW_INPUTS`) y
-Ajustes (los de la tele).
+**Última fila, «Tele»:** PlayStation 5 (pasa directo a HDMI 2: la entrada
+`com.tcl.tvinput/.TvPassThroughService/HW16`, que abre `com.tcl.tv`), Entradas (selector de HDMI de TCL,
+`com.android.tv.action.VIEW_INPUTS`), Ajustes (los de la tele) y, mientras Hollywood no sea el inicio,
+**Usar como inicio**: el diálogo de Android para elegir la app de inicio (rol HOME), o los ajustes de
+inicio si el sistema no lo ofrece. En el emulador, elegirlo funcionó; el launcher de Google, si sigue
+habilitado, puede seguir abriendo pantallas suyas (desactivarlo es la fase B del debloat).
+
+**Foco:** diseño B de `docs/mockups/foco.html`: anillo blanco separado de la tarjeta, el resto de la
+fila atenuado, y el nombre de lo enfocado más grande.
 
 **Fondo:** la imagen de lo enfocado; si no, fondos al azar de la biblioteca de Jellyfin, que cambian
 cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la tarjeta.

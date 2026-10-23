@@ -1,5 +1,8 @@
 package dev.cardozo.hollywood.launcher.home
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -52,6 +55,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,14 +68,20 @@ import coil3.SingletonImageLoader
 import coil3.compose.asPainter
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import dev.cardozo.hollywood.launcher.R
 import dev.cardozo.hollywood.launcher.apps.TvApp
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.content.open
 import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.system.launch
+import dev.cardozo.hollywood.launcher.system.isDefaultHome
+import dev.cardozo.hollywood.launcher.system.openHomeSettings
+import dev.cardozo.hollywood.launcher.system.PLAYSTATION_INPUT
+import dev.cardozo.hollywood.launcher.system.openInput
 import dev.cardozo.hollywood.launcher.system.openInputs
 import dev.cardozo.hollywood.launcher.system.openSettings
+import dev.cardozo.hollywood.launcher.system.requestDefaultHomeIntent
 import dev.cardozo.hollywood.launcher.ui.Background
 import dev.cardozo.hollywood.launcher.ui.Dim
 import dev.cardozo.hollywood.launcher.ui.Faint
@@ -162,6 +172,14 @@ fun HomeScreen(
     // Back from details: the restorer puts focus on the card that opened it.
     val pageFocus = remember { FocusRequester() }
     val tvRow = remember { BringIntoViewRequester() }
+    // «Usar como inicio» shows until Hollywood holds the HOME role; checked again whenever Home comes back.
+    var isDefaultHome by remember { mutableStateOf(context.isDefaultHome()) }
+    LaunchedEffect(onScreen) { if (onScreen) isDefaultHome = context.isDefaultHome() }
+    val askForHome = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        isDefaultHome = context.isDefaultHome()
+        // Google TV may turn the dialog down without showing it: then the Home app setting.
+        if (!isDefaultHome && it.resultCode != Activity.RESULT_OK) context.openHomeSettings()
+    }
     var wasActive by remember { mutableStateOf(active) }
     LaunchedEffect(active) {
         if (active && !wasActive) runCatching { pageFocus.requestFocus() }
@@ -293,8 +311,15 @@ fun HomeScreen(
                         .padding(start = Edge, top = 8.dp, bottom = 28.dp),
                     horizontalArrangement = Arrangement.spacedBy(13.dp),
                 ) {
+                    SystemTile("PlayStation 5", icon = painterResource(R.drawable.playstation)) { context.openInput(PLAYSTATION_INPUT) }
                     SystemTile("Entradas", "⇄") { context.openInputs() }
                     SystemTile("Ajustes", "⚙") { context.openSettings() }
+                    if (!isDefaultHome) {
+                        SystemTile("Usar como inicio", "⌂") {
+                            val dialog = context.requestDefaultHomeIntent()
+                            if (dialog != null) askForHome.launch(dialog) else context.openHomeSettings()
+                        }
+                    }
                 }
                 Spacer(Modifier.height(20.dp))
             }

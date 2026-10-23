@@ -32,15 +32,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,42 +64,16 @@ private val CardShape = RoundedCornerShape(8.dp)
 /** How far the focus ring sits from the card. */
 private val FOCUS_GAP = 3.dp
 
-/** Focus, layout D of docs/mockups/foco.html: a pink ring a little away from the card, so the page's dark
- *  shows between them (readable on white banners too), and a violet glow around it. */
-private val FocusPink = Color(0xFFF472B6)
-private val FocusGlow = Color(0xFFA78BFA)
+/** Focus, layout B of docs/mockups/foco.html: a white ring a little away from the card, so the page's dark
+ *  shows between them (readable on white banners too), and the rest of the row dimmed. */
 
 @Composable
 private fun cardBorder() = CardDefaults.border(
-    focusedBorder = Border(BorderStroke(3.dp, FocusPink), inset = FOCUS_GAP, shape = CardShape),
+    focusedBorder = Border(BorderStroke(3.dp, Color.White), inset = FOCUS_GAP, shape = CardShape),
 )
 
-/**
- * A violet halo around a focused card, outside its focus ring: rounded rectangles that grow and fade, a
- * cheap stand-in for a blur (BlurMaskFilter draws nothing on the TV's GPU path, and tv-material's Glow is
- * a coloured shadow that barely shows on a dark page). Drawn by a box around the card, because the card's
- * own surface clips whatever its modifier draws.
- */
-private fun Modifier.focusGlow(): Modifier = composed {
-    var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.hasFocus }.drawBehind {
-        if (!focused) return@drawBehind
-        val layers = 9
-        for (layer in 0 until layers) {
-            val grow = (7 + layer * 2.2f).dp.toPx()
-            val fade = 1f - layer / layers.toFloat()
-            drawRoundRect(
-                color = FocusGlow.copy(alpha = 0.32f * fade),
-                topLeft = Offset(-grow, -grow),
-                size = Size(size.width + 2 * grow, size.height + 2 * grow),
-                cornerRadius = CornerRadius(grow + 8.dp.toPx()),
-            )
-        }
-    }
-}
-
 /** The rest of a row while one of its cards has focus: a little dimmed, so the focused one stands out. */
-const val UNFOCUSED_ALPHA = 0.7f
+const val UNFOCUSED_ALPHA = 0.45f
 
 @OptIn(ExperimentalFoundationApi::class) // BringIntoViewRequester
 @Composable
@@ -111,45 +81,48 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean =
     // Focus brings the card into view; this brings the title under it too, or the last row shows it cut off.
     val wholeCard = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
+    var focused by remember { mutableStateOf(false) }
     Column(
         modifier
             .width(180.dp)
             .bringIntoViewRequester(wholeCard)
-            .onFocusChanged { if (it.hasFocus) scope.launch { wholeCard.bringIntoView() } },
+            .onFocusChanged {
+                focused = it.hasFocus
+                if (it.hasFocus) scope.launch { wholeCard.bringIntoView() }
+            },
     ) {
-        Box(Modifier.focusGlow()) {
-            Card(
-                onClick = onClick,
-                shape = CardDefaults.shape(CardShape),
-                scale = CardDefaults.scale(focusedScale = 1.08f),
-                border = cardBorder(),
-                colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
-                modifier = Modifier.size(180.dp, 101.dp),
-            ) {
-                Box(Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = item.cardImageUrl,
-                        contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+        Card(
+            onClick = onClick,
+            shape = CardDefaults.shape(CardShape),
+            scale = CardDefaults.scale(focusedScale = 1.08f),
+            border = cardBorder(),
+            colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
+            modifier = Modifier.size(180.dp, 101.dp),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = item.cardImageUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
+                if (item.progress != null) {
+                    ProgressBar(item.progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
+                }
+                item.duration?.let {
+                    Text(
+                        it, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(5.dp)
+                            .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(3.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                     )
-                    if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
-                    if (item.progress != null) {
-                        ProgressBar(item.progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
-                    }
-                    item.duration?.let {
-                        Text(
-                            it, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(5.dp)
-                                .background(Color.Black.copy(alpha = 0.78f), RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp),
-                        )
-                    }
                 }
             }
         }
         Text(
-            item.title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Foreground,
+            // The focused card's title a little larger, so it reads as the one selected.
+            item.title, fontSize = if (focused) 12.5.sp else 11.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold, color = Foreground,
             // Clear of the focus ring, which sits outside the scaled card.
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 11.dp),
         )
@@ -171,24 +144,22 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean 
             .onFocusChanged { if (it.hasFocus) scope.launch { withMargin.bringIntoView() } }
             .padding(vertical = 12.dp),
     ) {
-    Box(Modifier.focusGlow()) {
-        Card(
-            onClick = onClick,
-            shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.08f),
-            border = cardBorder(),
-            colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
-            modifier = Modifier.size(98.dp, 147.dp),
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                AsyncImage(
-                    model = item.posterUrl,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
-            }
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.08f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
+        modifier = Modifier.size(98.dp, 147.dp),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = item.posterUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
         }
     }
     }
@@ -207,26 +178,24 @@ private fun ShowingBar(modifier: Modifier = Modifier) {
 @Composable
 fun AppTile(app: TvApp, focused: Boolean, modifier: Modifier = Modifier, nameBelow: Boolean = true, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Box(Modifier.focusGlow()) {
-        Card(
-            onClick = onClick,
-            shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.12f),
-            border = cardBorder(),
-            colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
-            modifier = modifier.size(108.dp, 61.dp),
-        ) {
-            Image(
-                bitmap = app.art,
-                contentDescription = app.label,
-                contentScale = if (app.hasBanner) ContentScale.Crop else ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().then(if (app.hasBanner) Modifier else Modifier.padding(10.dp)),
-            )
-        }
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.12f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
+        modifier = modifier.size(108.dp, 61.dp),
+    ) {
+        Image(
+            bitmap = app.art,
+            contentDescription = app.label,
+            contentScale = if (app.hasBanner) ContentScale.Crop else ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().then(if (app.hasBanner) Modifier else Modifier.padding(10.dp)),
+        )
     }
     // The name of the focused app; the space is always there so the row does not jump.
     if (nameBelow) Text(
-        app.label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Foreground, maxLines = 1,
+        app.label, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Foreground, maxLines = 1,
         modifier = Modifier.padding(top = 10.dp).alpha(if (focused) 1f else 0f),
     )
     }
@@ -234,18 +203,16 @@ fun AppTile(app: TvApp, focused: Boolean, modifier: Modifier = Modifier, nameBel
 
 @Composable
 fun AllAppsTile(onClick: () -> Unit) {
-    Box(Modifier.focusGlow()) {
-        Card(
-            onClick = onClick,
-            shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.08f),
-            border = cardBorder(),
-            colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
-            modifier = Modifier.size(108.dp, 61.dp),
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Todas las apps", fontSize = 11.sp, color = Foreground)
-            }
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.08f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
+        modifier = Modifier.size(108.dp, 61.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Todas las apps", fontSize = 11.sp, color = Foreground)
         }
     }
 }
@@ -257,24 +224,22 @@ fun ActionCard(
     colors: List<Color> = listOf(Color(0xFF6A2C91), Color(0xFF00A4DC)),
     onClick: () -> Unit,
 ) {
-    Box(Modifier.focusGlow()) {
-        Card(
-            onClick = onClick,
-            shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.04f),
-            border = cardBorder(),
-            colors = CardDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.size(380.dp, 101.dp),
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.04f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.size(380.dp, 101.dp),
+    ) {
+        Column(
+            Modifier.fillMaxSize()
+                .background(Brush.linearGradient(colors))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Column(
-                Modifier.fillMaxSize()
-                    .background(Brush.linearGradient(colors))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text(subtitle, fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
-            }
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(subtitle, fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
         }
     }
 }
@@ -296,21 +261,20 @@ fun TopBar(weather: Weather?, modifier: Modifier = Modifier) {
 
 /** A tile in the last row of Home, for the TV's own screens (inputs, settings). */
 @Composable
-fun SystemTile(label: String, symbol: String, onClick: () -> Unit) {
-    Box(Modifier.focusGlow()) {
-        Card(
-            onClick = onClick,
-            shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.08f),
-            border = cardBorder(),
-            colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
-            modifier = Modifier.size(150.dp, 61.dp),
-        ) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Text(symbol, fontSize = 15.sp, color = Foreground)
-                Spacer(Modifier.width(8.dp))
-                Text(label, fontSize = 12.sp, color = Foreground)
-            }
+fun SystemTile(label: String, symbol: String? = null, icon: Painter? = null, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.08f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
+        modifier = Modifier.size(150.dp, 61.dp),
+    ) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            if (symbol != null) Text(symbol, fontSize = 15.sp, color = Foreground)
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 12.sp, color = Foreground)
         }
     }
 }
