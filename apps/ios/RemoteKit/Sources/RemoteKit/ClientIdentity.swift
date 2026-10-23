@@ -35,7 +35,7 @@ public struct ClientIdentity: Sendable {
     }
 
     /// The identity kept in the Keychain, created the first time. Used by the iPhone app.
-    public static func keychain(account: String = "dev.cristian.hollywood.remote") throws -> ClientIdentity {
+    public static func keychain(account: String = "dev.cardozo.hollywood.remote") throws -> ClientIdentity {
         if let cert = Keychain.read(account: account, kind: "cert"), let key = Keychain.read(account: account, kind: "key") {
             return try ClientIdentity(certificateDER: cert, privateKeyDER: key)
         }
@@ -46,7 +46,7 @@ public struct ClientIdentity: Sendable {
     }
 
     /// Forgets the identity: the TV will ask to pair again.
-    public static func deleteKeychain(account: String = "dev.cristian.hollywood.remote") {
+    public static func deleteKeychain(account: String = "dev.cardozo.hollywood.remote") {
         Keychain.delete(account: account, kind: "cert")
         Keychain.delete(account: account, kind: "key")
     }

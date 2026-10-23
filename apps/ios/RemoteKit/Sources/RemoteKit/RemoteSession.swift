@@ -103,7 +103,7 @@ public final class RemoteSession: @unchecked Sendable {
         case .configure(let model, let vendor, _):
             update { $0.model = model; $0.vendor = vendor }
             channel.send(Remote.configure(features: features, model: deviceName, vendor: "Hollywood",
-                                          package: "dev.cristian.hollywood.remote", version: "1.0"))
+                                          package: "dev.cardozo.hollywood.remote", version: "1.0"))
         case .setActive:
             channel.send(Remote.setActive(features: features))
         case .ping(let value):
