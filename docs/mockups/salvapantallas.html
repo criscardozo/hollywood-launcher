@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: salvapantallas de películas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --fg: #f2f3f5; --dim: rgba(242,243,245,.7); --faint: rgba(242,243,245,.45);
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #1b1d22; color: var(--fg); font-family: var(--font); }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; flex-wrap: wrap; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 10px 0 0; }
+  .chrome .sep { width: 1px; height: 22px; background: #3a3d45; margin: 0 6px; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; }
+  .notes { width: 320px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+  .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: #000; overflow: hidden; }
+  .layer { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .kb { animation: kb 20s ease-in-out infinite alternate; }
+  @keyframes kb { from { transform: scale(1.02) translate(0, 0); } to { transform: scale(1.1) translate(-2%, -1%); } }
+  .clock { position: absolute; font-weight: 300; font-size: 84px; color: rgba(242,243,245,.85); text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  .poster { border-radius: 18px; background-size: cover; box-shadow: 0 40px 90px rgba(0,0,0,.7); }
+  .kicker { font-size: 20px; letter-spacing: 3px; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .t { font-weight: 800; letter-spacing: -2px; line-height: .98; margin: 14px 0 18px; }
+  .m { font-size: 26px; color: var(--dim); margin-bottom: 22px; }
+  .d { font-size: 27px; line-height: 1.5; color: var(--dim); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .dots { position: absolute; display: flex; gap: 10px; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.3); }
+  .dots i.on { background: #fff; width: 34px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Salvapantallas · películas al azar</h1>
+  <button class="tab" data-layout="A">A · Cartelera</button>
+  <button class="tab" data-layout="B">B · Pantalla completa</button>
+  <button class="tab" data-layout="C">C · Galería</button>
+  <span class="sep"></span>
+  <button class="tab" data-film="0">Película 1</button>
+  <button class="tab" data-film="1">Película 2</button>
+  <button class="tab" data-film="2">Película 3</button>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport"><div class="stage" id="stage"></div></div>
+  <div class="notes" id="notes"></div>
+</div>
+<script>
+// Single quotes: these URLs go inside style="…" attributes. Synthetic art only: the repo is public.
+const svgUrl = svg => `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29")}')`;
+function art(seed, w = 1920, h = 1080) {
+  const p = [["#0f2a3a", "#1f5f7a", "#e8a25a"], ["#2a1638", "#6b2f6b", "#f2b46b"], ["#10261c", "#2f6b52", "#e9d27a"]][seed % 3];
+  return svgUrl(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${h}' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='${p[0]}'/><stop offset='.62' stop-color='${p[1]}'/><stop offset='1' stop-color='${p[0]}'/></linearGradient>
+    <radialGradient id='g' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='${p[2]}' stop-opacity='.85'/><stop offset='1' stop-color='${p[2]}' stop-opacity='0'/></radialGradient></defs>
+    <rect width='${w}' height='${h}' fill='url(#s)'/><circle cx='${w * .66}' cy='${h * .5}' r='${Math.min(w, h) * .42}' fill='url(#g)'/>
+    <circle cx='${w * .66}' cy='${h * .5}' r='${Math.min(w, h) * .08}' fill='${p[2]}'/>
+    <path d='M0 ${h * .78} Q ${w * .3} ${h * .68} ${w * .55} ${h * .8} T ${w} ${h * .74} V ${h} H 0 Z' fill='${p[0]}' opacity='.9'/></svg>`);
+}
+const FILMS = [
+  { title: "La costa de los faros", meta: "2024 · Drama · 2 h 4 min · ★ 7,8", d: "Una cartógrafa vuelve al pueblo donde creció para trazar el último tramo de costa sin mapa, y encuentra que los faros se apagan uno por uno siguiendo un orden que solo su padre conocía." },
+  { title: "Noche de estreno", meta: "2019 · Comedia · 1 h 41 min · ★ 6,9", d: "Una compañía de teatro de barrio tiene una sola noche para salvar la sala: el protagonista no aparece, el decorado se cae y en primera fila está el crítico que los hundió hace diez años." },
+  { title: "Bosque adentro", meta: "2022 · Fantasía · 1 h 58 min · ★ 7,3", d: "Dos hermanas siguen el rastro de su abuela en un bosque donde el tiempo corre distinto, y descubren que cada sendero devuelve a quien lo camina un año más joven." },
+];
+const state = { layout: "A", film: 0 };
+const dots = (i, style) => `<div class="dots" style="${style}">${FILMS.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("")}</div>`;
+const LAYOUTS = {
+  A: {
+    notes: `<h2>A · Cartelera</h2><ul>
+      <li>Póster grande a la izquierda; título, año, género, duración, puntaje y sinopsis a la derecha.</li>
+      <li>De fondo, la misma película desenfocada y oscura, con un zoom muy lento.</li>
+      <li>Reloj abajo a la derecha, como ahora.</li></ul>
+      <h2>Recomendada</h2><p>Es literalmente lo que pediste (póster, nombre y descripción) y se lee desde el sillón.</p>`,
+    render: (f, i) => `<div class="layer kb" style="background-image:${art(i)};filter:blur(28px) brightness(.45)"></div>
+      <div class="layer" style="background:radial-gradient(120% 90% at 30% 50%,transparent,rgba(0,0,0,.55))"></div>
+      <div class="poster" style="position:absolute;left:150px;top:150px;width:520px;height:780px;background-image:${art(i, 600, 900)}"></div>
+      <div style="position:absolute;left:770px;top:250px;width:960px">
+        <div class="kicker">En tu Jellyfin</div><div class="t" style="font-size:96px">${f.title}</div>
+        <div class="m">${f.meta}</div><div class="d" style="-webkit-line-clamp:4">${f.d}</div></div>
+      ${dots(i, "left:770px;bottom:150px")}<div class="clock" style="right:96px;bottom:60px">22:14</div>`,
+  },
+  B: {
+    notes: `<h2>B · Pantalla completa</h2><ul>
+      <li>El fondo de la película nítido y a pantalla completa, con zoom lento.</li>
+      <li>Póster chico abajo a la izquierda con el título y la sinopsis al lado.</li>
+      <li>Más cine, menos texto; el reloj arriba a la derecha.</li></ul>`,
+    render: (f, i) => `<div class="layer kb" style="background-image:${art(i)}"></div>
+      <div class="layer" style="background:linear-gradient(0deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.55) 30%,transparent 58%)"></div>
+      <div class="poster" style="position:absolute;left:96px;bottom:96px;width:200px;height:300px;background-image:${art(i, 600, 900)}"></div>
+      <div style="position:absolute;left:340px;bottom:110px;width:1150px">
+        <div class="t" style="font-size:72px;margin-top:0">${f.title}</div><div class="m" style="margin-bottom:14px">${f.meta}</div>
+        <div class="d" style="-webkit-line-clamp:2;font-size:25px">${f.d}</div></div>
+      <div class="clock" style="right:96px;top:50px;font-size:64px">22:14</div>`,
+  },
+  C: {
+    notes: `<h2>C · Galería</h2><ul>
+      <li>El póster al centro, enorme, como un cuadro; título y una línea de sinopsis debajo.</li>
+      <li>El fondo toma los colores del póster, muy desenfocado.</li>
+      <li>La más «slideshow»; la sinopsis queda corta.</li></ul>`,
+    render: (f, i) => `<div class="layer kb" style="background-image:${art(i, 600, 900)};filter:blur(60px) brightness(.5);transform:scale(1.3)"></div>
+      <div class="poster" style="position:absolute;left:760px;top:70px;width:400px;height:600px;background-image:${art(i, 600, 900)}"></div>
+      <div style="position:absolute;left:260px;right:260px;top:720px;text-align:center">
+        <div class="t" style="font-size:64px;margin:0 0 10px">${f.title}</div><div class="m" style="margin-bottom:12px">${f.meta}</div>
+        <div class="d" style="-webkit-line-clamp:2;font-size:24px">${f.d}</div></div>
+      <div class="clock" style="right:80px;bottom:50px;font-size:56px">22:14</div>`,
+  },
+};
+function render() {
+  document.getElementById("stage").innerHTML = LAYOUTS[state.layout].render(FILMS[state.film], state.film);
+  document.getElementById("notes").innerHTML = LAYOUTS[state.layout].notes +
+    `<h2>En las tres</h2><ul><li>Una película al azar de la biblioteca cada ~20 s, con fundido.</li>
+     <li>El bloque de texto se corre unos píxeles cada tanto, para que no quede marcado en la pantalla.</li>
+     <li>Solo películas con póster y sinopsis.</li></ul>`;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.layout === state.layout || t.dataset.film === String(state.film)));
+  location.hash = `${state.layout}-${state.film}`;
+}
+function fit() { document.getElementById("stage").style.transform = `scale(${document.getElementById("viewport").clientWidth / 1920})`; }
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  if (t.dataset.layout) state.layout = t.dataset.layout;
+  if (t.dataset.film) state.film = +t.dataset.film;
+  render();
+});
+const [l, f] = location.hash.slice(1).split("-");
+if (LAYOUTS[l]) state.layout = l;
+if (FILMS[+f]) state.film = +f;
+addEventListener("resize", fit);
+render(); fit();
+</script>
+</body>
+</html>

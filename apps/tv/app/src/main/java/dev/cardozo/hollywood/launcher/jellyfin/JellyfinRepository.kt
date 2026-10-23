@@ -49,6 +49,9 @@ sealed interface QuickConnectState {
     data class Failed(val reason: String) : QuickConnectState
 }
 
+/** One film of the screensaver: its backdrop full screen, the poster and the text over it. */
+data class ScreensaverSlide(val title: String, val meta: String, val overview: String, val backdropUrl: String, val posterUrl: String)
+
 /** What the home screen shows from Jellyfin. */
 data class JellyfinHome(
     /** In progress first, then next up episodes. */
@@ -222,6 +225,34 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
             recentlyAdded = latest.map { api.toMediaItem(it) },
             wallpapers = api.randomBackdrops(userId, 20),
         )
+    }
+
+    /** Random films with a backdrop, a poster and an overview, for the screensaver. Empty when not connected. */
+    suspend fun screensaverSlides(limit: Int = 40): List<ScreensaverSlide> = withContext(Dispatchers.IO) {
+        val session = store.session.first() ?: return@withContext emptyList()
+        val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
+        api.libraryApi.getItems(
+            GetItemsRequest(
+                userId = UUID.fromString(session.userId),
+                recursive = true,
+                includeItemTypes = listOf(BaseItemKind.MOVIE),
+                imageTypes = listOf(ImageType.BACKDROP),
+                fields = CARD_FIELDS,
+                sortBy = listOf(ItemSortBy.RANDOM),
+                limit = limit,
+            ),
+        ).content.items.mapNotNull { item ->
+            val overview = item.overview?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val backdrop = api.backdropUrl(item) ?: return@mapNotNull null
+            val poster = api.posterUrl(item) ?: return@mapNotNull null
+            val meta = listOfNotNull(
+                item.productionYear?.toString(),
+                item.genres?.firstOrNull(),
+                item.runTimeTicks?.let { formatMinutes(it / TICKS_PER_MS / 60_000) },
+                item.communityRating?.let { "★ ${formatScore(it)}" },
+            ).joinToString(" · ")
+            ScreensaverSlide(item.name.orEmpty(), meta, overview, backdrop, poster)
+        }
     }
 
     /** Random backdrops from the library, for the wallpaper and the screensaver. Empty when not connected. */
