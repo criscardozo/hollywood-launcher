@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -173,19 +175,21 @@ fun ActionCard(
 }
 
 @Composable
-fun TopBar(modifier: Modifier = Modifier) {
+fun TopBar(down: FocusRequester, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-        Pill("Entradas") { context.openInputs() }
-        Pill("Ajustes") { context.openSettings() }
+        // The bar floats over the top right with nothing beneath it, so Down has no geometric target.
+        Pill("Entradas", down) { context.openInputs() }
+        Pill("Ajustes", down) { context.openSettings() }
         Clock()
     }
 }
 
 @Composable
-private fun Pill(label: String, onClick: () -> Unit) {
+private fun Pill(label: String, down: FocusRequester, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
+        modifier = Modifier.focusProperties { this.down = down },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.White.copy(alpha = 0.12f),

@@ -94,8 +94,14 @@ fun HomeScreen(
     val dockFocus = remember { FocusRequester() }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
-    // Back on the shelf or the dock, the page returns to the top so the hero is visible again.
-    val toTop: () -> Unit = { scope.launch { scroll.animateScrollTo(0) } }
+    // Back on the shelf or the dock, the page returns to the top so the hero is visible again. The wait lets
+    // the focus change's own bring-into-view scroll finish first; otherwise it wins and the page stays down.
+    val toTop: () -> Unit = {
+        scope.launch {
+            delay(50)
+            scroll.animateScrollTo(0)
+        }
+    }
     LaunchedEffect(dock.isNotEmpty(), focusDockSignal) {
         if (dock.isNotEmpty()) {
             runCatching { dockFocus.requestFocus() }
@@ -189,7 +195,7 @@ fun HomeScreen(
             Spacer(Modifier.height(48.dp))
         }
 
-        TopBar(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 36.dp))
+        TopBar(down = dockFocus, modifier = Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 36.dp))
     }
 }
 
