@@ -1,11 +1,11 @@
-package dev.cristian.tv.launcher.system
+package dev.cardozo.hollywood.launcher.system
 
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
-import dev.cristian.tv.launcher.apps.TvApp
+import dev.cardozo.hollywood.launcher.apps.TvApp
 
 private const val TAG = "SystemActions"
 

@@ -1,8 +1,8 @@
-package dev.cristian.tv.launcher.pins
+package dev.cardozo.hollywood.launcher.pins
 
-import dev.cristian.tv.launcher.content.Source
-import dev.cristian.tv.launcher.net.Http
-import dev.cristian.tv.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.content.Source
+import dev.cardozo.hollywood.launcher.net.Http
+import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request

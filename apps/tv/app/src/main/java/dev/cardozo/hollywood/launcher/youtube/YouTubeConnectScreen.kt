@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.youtube
+package dev.cardozo.hollywood.launcher.youtube
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -21,10 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
-import dev.cristian.tv.launcher.launcherApp
-import dev.cristian.tv.launcher.ui.Background
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.ui.Background
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.flow.catch
 
 /** Google's TV sign-in: a code to type at google.com/device on the phone. */

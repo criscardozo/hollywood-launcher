@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.screensaver
+package dev.cardozo.hollywood.launcher.screensaver
 
 import android.graphics.Color
 import android.graphics.Typeface
@@ -12,7 +12,7 @@ import android.widget.TextClock
 import coil3.SingletonImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
-import dev.cristian.tv.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.launcherApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

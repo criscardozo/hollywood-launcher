@@ -123,7 +123,7 @@ nada.
 
 ## Técnica
 
-- Kotlin + Jetpack Compose con `androidx.tv:tv-material`. Paquete `dev.cristian.tv.launcher`.
+- Kotlin + Jetpack Compose con `androidx.tv:tv-material`. Paquete `dev.cardozo.hollywood.launcher`.
 - Jellyfin con el SDK oficial; HTTP con OkHttp; JSON con kotlinx.serialization; imágenes con Coil;
   configuración en DataStore; página web con NanoHTTPD (vive en el proceso del launcher, que como
   inicio siempre está corriendo; sin servicios en segundo plano).

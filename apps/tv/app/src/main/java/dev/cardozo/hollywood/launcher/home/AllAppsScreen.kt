@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.home
+package dev.cardozo.hollywood.launcher.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +30,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
-import dev.cristian.tv.launcher.system.launch
-import dev.cristian.tv.launcher.ui.Background
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.system.launch
+import dev.cardozo.hollywood.launcher.ui.Background
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Foreground
 
 @Composable
 fun AllAppsScreen(onOpenSettings: () -> Unit, viewModel: HomeViewModel = viewModel()) {

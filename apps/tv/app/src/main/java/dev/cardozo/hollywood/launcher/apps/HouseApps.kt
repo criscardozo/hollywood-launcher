@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.apps
+package dev.cardozo.hollywood.launcher.apps
 
 /** The apps the house uses (decided 2026-10-22), in the order they appear on the Apps row. */
 val houseApps = listOf(

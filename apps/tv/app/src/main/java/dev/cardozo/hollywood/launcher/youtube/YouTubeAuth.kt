@@ -1,8 +1,8 @@
-package dev.cristian.tv.launcher.youtube
+package dev.cardozo.hollywood.launcher.youtube
 
-import dev.cristian.tv.launcher.net.Http
-import dev.cristian.tv.launcher.net.HttpException
-import dev.cristian.tv.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.net.Http
+import dev.cardozo.hollywood.launcher.net.HttpException
+import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow

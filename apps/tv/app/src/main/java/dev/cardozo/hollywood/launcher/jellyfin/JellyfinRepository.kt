@@ -1,9 +1,9 @@
-package dev.cristian.tv.launcher.jellyfin
+package dev.cardozo.hollywood.launcher.jellyfin
 
 import android.content.Context
 import android.util.Log
-import dev.cristian.tv.launcher.content.MediaItem
-import dev.cristian.tv.launcher.content.Source
+import dev.cardozo.hollywood.launcher.content.MediaItem
+import dev.cardozo.hollywood.launcher.content.Source
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

@@ -1,10 +1,10 @@
-package dev.cristian.tv.launcher.remote
+package dev.cardozo.hollywood.launcher.remote
 
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
-import dev.cristian.tv.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.launcherApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.onEach
  * settings page, after "learning" which keycode a button sends ([RemoteKeys.recent]).
  *
  * Enabled from adb, not from the TV's menus:
- *   settings put secure enabled_accessibility_services dev.cristian.tv.launcher/.remote.RemoteKeysService
+ *   settings put secure enabled_accessibility_services dev.cardozo.hollywood.launcher/.remote.RemoteKeysService
  * Some TCL firmwares refuse to auto-start sideloaded services (OP_AUTO_START), and keys injected with
  * `input keyevent` never reach accessibility services there: test with the real remote.
  */

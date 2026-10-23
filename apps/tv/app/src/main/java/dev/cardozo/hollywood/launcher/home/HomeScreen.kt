@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.home
+package dev.cardozo.hollywood.launcher.home
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -46,15 +46,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import dev.cristian.tv.launcher.apps.TvApp
-import dev.cristian.tv.launcher.content.MediaItem
-import dev.cristian.tv.launcher.content.Source
-import dev.cristian.tv.launcher.content.open
-import dev.cristian.tv.launcher.system.launch
-import dev.cristian.tv.launcher.ui.Background
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Faint
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.apps.TvApp
+import dev.cardozo.hollywood.launcher.content.MediaItem
+import dev.cardozo.hollywood.launcher.content.Source
+import dev.cardozo.hollywood.launcher.content.open
+import dev.cardozo.hollywood.launcher.system.launch
+import dev.cardozo.hollywood.launcher.ui.Background
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Faint
+import dev.cardozo.hollywood.launcher.ui.Foreground
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

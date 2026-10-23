@@ -1,12 +1,12 @@
-package dev.cristian.tv.launcher.remote
+package dev.cardozo.hollywood.launcher.remote
 
 import android.content.Context
 import android.view.KeyEvent
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import dev.cristian.tv.launcher.net.Http
-import dev.cristian.tv.launcher.system.start
+import dev.cardozo.hollywood.launcher.net.Http
+import dev.cardozo.hollywood.launcher.system.start
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map

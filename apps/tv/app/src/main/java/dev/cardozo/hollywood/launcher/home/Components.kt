@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.home
+package dev.cardozo.hollywood.launcher.home
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -33,12 +33,12 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import dev.cristian.tv.launcher.apps.TvApp
-import dev.cristian.tv.launcher.content.MediaItem
-import dev.cristian.tv.launcher.system.openInputs
-import dev.cristian.tv.launcher.system.openSettings
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.apps.TvApp
+import dev.cardozo.hollywood.launcher.content.MediaItem
+import dev.cardozo.hollywood.launcher.system.openInputs
+import dev.cardozo.hollywood.launcher.system.openSettings
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter

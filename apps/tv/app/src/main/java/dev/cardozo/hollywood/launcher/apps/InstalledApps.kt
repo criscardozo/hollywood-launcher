@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.apps
+package dev.cardozo.hollywood.launcher.apps
 
 import android.content.BroadcastReceiver
 import android.content.ComponentName

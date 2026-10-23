@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.jellyfin
+package dev.cardozo.hollywood.launcher.jellyfin
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
@@ -36,10 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
-import dev.cristian.tv.launcher.launcherApp
-import dev.cristian.tv.launcher.ui.Background
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.ui.Background
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.withTimeoutOrNull
 

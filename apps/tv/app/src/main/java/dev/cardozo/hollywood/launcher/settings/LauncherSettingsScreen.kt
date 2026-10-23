@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.settings
+package dev.cardozo.hollywood.launcher.settings
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -26,11 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
-import dev.cristian.tv.launcher.admin.ADMIN_PORT
-import dev.cristian.tv.launcher.launcherApp
-import dev.cristian.tv.launcher.ui.Background
-import dev.cristian.tv.launcher.ui.Dim
-import dev.cristian.tv.launcher.ui.Foreground
+import dev.cardozo.hollywood.launcher.admin.ADMIN_PORT
+import dev.cardozo.hollywood.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.ui.Background
+import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
 

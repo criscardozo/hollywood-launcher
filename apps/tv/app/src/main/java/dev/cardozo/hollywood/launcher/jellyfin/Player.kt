@@ -1,7 +1,7 @@
-package dev.cristian.tv.launcher.jellyfin
+package dev.cardozo.hollywood.launcher.jellyfin
 
 import android.content.Intent
-import dev.cristian.tv.launcher.content.MediaItem
+import dev.cardozo.hollywood.launcher.content.MediaItem
 
 /**
  * The Jellyfin client that plays what the launcher picks. The launcher only builds the intent: watch

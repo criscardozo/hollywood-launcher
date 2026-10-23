@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher
+package dev.cardozo.hollywood.launcher
 
 import android.app.Application
 import coil3.ImageLoader
@@ -6,16 +6,16 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
-import dev.cristian.tv.launcher.admin.AdminServer
-import dev.cristian.tv.launcher.apps.InstalledApps
-import dev.cristian.tv.launcher.jellyfin.JellyfinRepository
-import dev.cristian.tv.launcher.jellyfin.JellyfinSessionStore
-import dev.cristian.tv.launcher.pins.PinsRepository
-import dev.cristian.tv.launcher.pins.SeerrClient
-import dev.cristian.tv.launcher.remote.RemoteKeys
-import dev.cristian.tv.launcher.settings.LauncherSettings
-import dev.cristian.tv.launcher.youtube.YouTubeAuth
-import dev.cristian.tv.launcher.youtube.YouTubeRepository
+import dev.cardozo.hollywood.launcher.admin.AdminServer
+import dev.cardozo.hollywood.launcher.apps.InstalledApps
+import dev.cardozo.hollywood.launcher.jellyfin.JellyfinRepository
+import dev.cardozo.hollywood.launcher.jellyfin.JellyfinSessionStore
+import dev.cardozo.hollywood.launcher.pins.PinsRepository
+import dev.cardozo.hollywood.launcher.pins.SeerrClient
+import dev.cardozo.hollywood.launcher.remote.RemoteKeys
+import dev.cardozo.hollywood.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.youtube.YouTubeAuth
+import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
 
 class LauncherApplication : Application(), SingletonImageLoader.Factory {
 

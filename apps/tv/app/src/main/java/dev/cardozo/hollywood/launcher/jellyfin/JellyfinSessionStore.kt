@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.jellyfin
+package dev.cardozo.hollywood.launcher.jellyfin
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit

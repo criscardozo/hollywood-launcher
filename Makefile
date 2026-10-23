@@ -20,7 +20,7 @@ tv-emulator:
 
 tv-run: tv-build
 	$(ADB) -e install -r $(APK)
-	$(ADB) -e shell am start -n dev.cristian.tv.launcher/.MainActivity
+	$(ADB) -e shell am start -n dev.cardozo.hollywood.launcher/.MainActivity
 
 tv-screenshot:
 	$(ADB) -e exec-out screencap -p > /tmp/tv-launcher.png && open /tmp/tv-launcher.png

@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.net
+package dev.cardozo.hollywood.launcher.net
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

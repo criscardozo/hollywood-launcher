@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.cristian.tv.launcher"
+    namespace = "dev.cardozo.hollywood.launcher"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "dev.cristian.tv.launcher"
+        applicationId = "dev.cardozo.hollywood.launcher"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1

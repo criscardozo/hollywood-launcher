@@ -1,10 +1,10 @@
-package dev.cristian.tv.launcher.content
+package dev.cardozo.hollywood.launcher.content
 
 import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
-import dev.cristian.tv.launcher.jellyfin.Player
-import dev.cristian.tv.launcher.system.start
+import dev.cardozo.hollywood.launcher.jellyfin.Player
+import dev.cardozo.hollywood.launcher.system.start
 
 /** What OK on a card does, by source. */
 fun Context.open(item: MediaItem, player: Player) {

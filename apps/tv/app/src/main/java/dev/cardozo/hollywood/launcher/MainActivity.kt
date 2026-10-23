@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher
+package dev.cardozo.hollywood.launcher
 
 import android.content.Intent
 import android.os.Bundle
@@ -10,13 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import dev.cristian.tv.launcher.home.AllAppsScreen
-import dev.cristian.tv.launcher.home.HomeScreen
-import dev.cristian.tv.launcher.home.HomeViewModel
-import dev.cristian.tv.launcher.jellyfin.ConnectScreen
-import dev.cristian.tv.launcher.settings.LauncherSettingsScreen
-import dev.cristian.tv.launcher.youtube.YouTubeConnectScreen
-import dev.cristian.tv.launcher.ui.LauncherTheme
+import dev.cardozo.hollywood.launcher.home.AllAppsScreen
+import dev.cardozo.hollywood.launcher.home.HomeScreen
+import dev.cardozo.hollywood.launcher.home.HomeViewModel
+import dev.cardozo.hollywood.launcher.jellyfin.ConnectScreen
+import dev.cardozo.hollywood.launcher.settings.LauncherSettingsScreen
+import dev.cardozo.hollywood.launcher.youtube.YouTubeConnectScreen
+import dev.cardozo.hollywood.launcher.ui.LauncherTheme
 
 private enum class Screen { HOME, ALL_APPS, CONNECT_JELLYFIN, CONNECT_YOUTUBE, SETTINGS }
 

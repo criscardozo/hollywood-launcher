@@ -1,4 +1,4 @@
-package dev.cristian.tv.launcher.ui
+package dev.cardozo.hollywood.launcher.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color

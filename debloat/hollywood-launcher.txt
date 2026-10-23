@@ -3,11 +3,11 @@
 # Apply ONLY after:
 #   1. apps/tv is installed (tools/tv install -r app-release.apk) and was opened by hand at least once;
 #   2. the screensaver points at our DreamService:
-#      tools/tv shell settings put secure screensaver_components dev.cristian.tv.launcher/.screensaver.ClockDream
+#      tools/tv shell settings put secure screensaver_components dev.cardozo.hollywood.launcher/.screensaver.ClockDream
 #   3. somebody is at the TV with the remote.
 #
 # Optional, for the remote's dead app keys (Netflix, TCL Channel, films), after this list:
-#   tools/tv shell settings put secure enabled_accessibility_services dev.cristian.tv.launcher/.remote.RemoteKeysService
+#   tools/tv shell settings put secure enabled_accessibility_services dev.cardozo.hollywood.launcher/.remote.RemoteKeysService
 #   tools/tv shell settings put secure accessibility_enabled 1
 # then learn and assign the keys from the settings page (http://192.168.0.4:8765).
 #
@@ -23,7 +23,7 @@
 #     Chromecast anyway (hollywood.txt), so it does not matter.
 #
 # Ground truth after applying: `tools/tv shell dumpsys activity activities | grep mFocusedApp` after
-# pressing Home must name dev.cristian.tv.launcher. If it does not, restore at once:
+# pressing Home must name dev.cardozo.hollywood.launcher. If it does not, restore at once:
 #   tools/debloat.sh restore debloat/hollywood-launcher.txt
 
 com.google.android.apps.tv.launcherx   # stock Google TV home (~130 MB with its coreservices process)

@@ -1,10 +1,10 @@
-package dev.cristian.tv.launcher.youtube
+package dev.cardozo.hollywood.launcher.youtube
 
 import android.util.Xml
-import dev.cristian.tv.launcher.content.MediaItem
-import dev.cristian.tv.launcher.content.Source
-import dev.cristian.tv.launcher.net.Http
-import dev.cristian.tv.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.content.MediaItem
+import dev.cardozo.hollywood.launcher.content.Source
+import dev.cardozo.hollywood.launcher.net.Http
+import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
