@@ -46,7 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self?.toggle()
         }
         // `-open YES` (with `-demo YES` for made-up state): the panel open at launch.
-        if UserDefaults.standard.bool(forKey: "open") { toggle() }
+        // The status item's button is not on screen yet at launch: show the popover a moment later.
+        if UserDefaults.standard.bool(forKey: "open") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.toggle() }
+        }
         // `-snapshot <path.png>`: draws the panel to a file and quits, to check it without screen recording.
         if let path = UserDefaults.standard.string(forKey: "snapshot") {
             let renderer = ImageRenderer(content: PanelRoot().environment(model).environment(\.colorScheme, .dark))
