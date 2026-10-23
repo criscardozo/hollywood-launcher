@@ -1,5 +1,8 @@
 package dev.cardozo.hollywood.launcher.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -7,15 +10,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -53,7 +60,7 @@ private fun cardBorder() = CardDefaults.border(
 )
 
 @Composable
-fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean = false, onClick: () -> Unit) {
     Column(modifier.width(180.dp)) {
         Card(
             onClick = onClick,
@@ -70,6 +77,7 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, onClick: () -> Uni
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
                 if (item.progress != null) {
                     ProgressBar(item.progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
                 }
@@ -94,7 +102,7 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, onClick: () -> Uni
 }
 
 @Composable
-fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean = false, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
@@ -103,12 +111,25 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, onClick: () -> Un
         colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
         modifier = modifier.size(98.dp, 147.dp),
     ) {
-        AsyncImage(
-            model = item.posterUrl,
-            contentDescription = item.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Box(Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = item.posterUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
+        }
+    }
+}
+
+/** Marks the card the idle hero is showing; it fills up until the hero moves on to the next one. */
+@Composable
+private fun ShowingBar(modifier: Modifier = Modifier) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { progress.animateTo(1f, tween(HERO_ROTATE_MS.toInt(), easing = LinearEasing)) }
+    Box(modifier.fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.45f))) {
+        Box(Modifier.fillMaxWidth(progress.value).fillMaxHeight().background(Color.White))
     }
 }
 

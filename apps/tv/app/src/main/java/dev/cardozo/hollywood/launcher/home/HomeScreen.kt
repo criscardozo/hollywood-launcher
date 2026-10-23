@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,12 +40,18 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.SingletonImageLoader
 import coil3.compose.asPainter
@@ -66,6 +73,11 @@ import kotlinx.coroutines.launch
 
 /** Left edge of the content; rows pad their own content so a focused, scaled card is not clipped. */
 private val Edge = 48.dp
+
+/** With no key pressed for this long, the hero starts walking the focused row on its own. */
+private const val IDLE_BEFORE_ROTATING_MS = 10_000L
+/** How long the idle hero stays on each item. */
+const val HERO_ROTATE_MS = 8_000L
 
 /**
  * Layout D from docs/mockups/launcher-2.html: a hero with the focused item's info, the top shelf of
@@ -92,8 +104,31 @@ fun HomeScreen(
     var shelfApp by remember { mutableStateOf<String?>(null) }
     var focusedItem by remember { mutableStateOf<MediaItem?>(null) }
     val shelf = viewModel.shelfFor(shelfApp, jellyfin, youtube, pinned)
+    // The row the focus is in; with the dock focused, that app's shelf.
+    var focusedRow by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    val shelfItems = (shelf as? Shelf.Items)?.items.orEmpty()
+    val row = if (focusedItem != null) focusedRow else shelfItems
+
+    // Left alone, the hero walks the row so the screen has some movement. Focus never moves, so OK still
+    // opens what was chosen; any key brings the hero back. Paused while Home is not on screen.
+    var keyPresses by remember { mutableIntStateOf(0) }
+    var showing by remember { mutableStateOf<MediaItem?>(null) }
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val onScreen = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(keyPresses, row, focusedItem, onScreen) {
+        showing = null
+        if (!onScreen || row.size < 2) return@LaunchedEffect
+        delay(IDLE_BEFORE_ROTATING_MS)
+        var index = row.indexOf(focusedItem ?: row.first()).coerceAtLeast(0)
+        while (true) {
+            index = (index + 1) % row.size
+            showing = row[index]
+            delay(HERO_ROTATE_MS)
+        }
+    }
+
     // With the dock focused, the hero shows the first item of that app's shelf (once it has loaded).
-    val heroItem = focusedItem ?: (shelf as? Shelf.Items)?.items?.firstOrNull()
+    val heroItem = showing ?: focusedItem ?: shelfItems.firstOrNull()
     val play: (MediaItem) -> Unit = { context.open(it, settings.player) }
 
     val dockFocus = remember { FocusRequester() }
@@ -116,8 +151,18 @@ fun HomeScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-        Backdrop(url = heroItem?.backdropUrl ?: wallpaper)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Background)
+            .onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown) keyPresses++
+                false
+            },
+    ) {
+        // Not every YouTube video has a maxres thumbnail: the card's image stands in for a missing backdrop.
+        val backdrops = listOfNotNull(heroItem?.backdropUrl, heroItem?.cardImageUrl).ifEmpty { listOfNotNull(wallpaper) }
+        Backdrop(backdrops)
         Box(
             Modifier.fillMaxSize().background(
                 Brush.horizontalGradient(
@@ -145,7 +190,8 @@ fun HomeScreen(
 
             ShelfRow(
                 shelf = shelf,
-                onFocusItem = { focusedItem = it; toTop() },
+                showing = showing,
+                onFocusItem = { focusedItem = it; focusedRow = shelfItems; toTop() },
                 onPlay = play,
                 onConnectJellyfin = onConnectJellyfin,
                 onConnectYouTube = onConnectYouTube,
@@ -180,7 +226,7 @@ fun HomeScreen(
             if (recent.isNotEmpty()) {
                 Spacer(Modifier.height(36.dp))
                 Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
-                PosterRow(recent, onFocusItem = { focusedItem = it }, onPlay = play)
+                PosterRow(recent, showing, onFocusItem = { focusedItem = it; focusedRow = recent }, onPlay = play)
             }
             // The first videos live in YouTube's shelf; without the YouTube app in the dock they all go here.
             val videos = (youtube as? YouTubeUi.Ready)?.videos.orEmpty()
@@ -191,12 +237,12 @@ fun HomeScreen(
                 Box(Modifier.padding(start = Edge)) {
                     RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
                 }
-                MediaRow(moreVideos, onFocusItem = { focusedItem = it }, onPlay = play)
+                MediaRow(moreVideos, showing, onFocusItem = { focusedItem = it; focusedRow = moreVideos }, onPlay = play)
             }
             if (pinned.isNotEmpty()) {
                 Spacer(Modifier.height(28.dp))
                 Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
-                MediaRow(pinned, onFocusItem = { focusedItem = it }, onPlay = play)
+                MediaRow(pinned, showing, onFocusItem = { focusedItem = it; focusedRow = pinned }, onPlay = play)
             }
             Spacer(Modifier.height(48.dp))
         }
@@ -206,20 +252,19 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Backdrop(url: String?) {
+private fun Backdrop(urls: List<String>) {
     val context = LocalContext.current
     // The next backdrop is loaded before it replaces the current one, so the crossfade goes from image to
     // image. Crossfading on the URL faded the old one out to black while the new one was still loading.
     var shown by remember { mutableStateOf<coil3.Image?>(null) }
-    LaunchedEffect(url) {
-        if (url == null) {
-            shown = null
-            return@LaunchedEffect
-        }
+    LaunchedEffect(urls) {
         // Moving quickly along a row cancels this, so only the backdrop where the focus stops is loaded.
-        delay(150)
-        val result = SingletonImageLoader.get(context).execute(ImageRequest.Builder(context).data(url).build())
-        if (result is SuccessResult) shown = result.image
+        if (urls.isNotEmpty()) delay(150)
+        val loader = SingletonImageLoader.get(context)
+        // The first that loads; none (or no URL) falls back to the gradient instead of keeping the last one.
+        shown = urls.firstNotNullOfOrNull { url ->
+            (loader.execute(ImageRequest.Builder(context).data(url).build()) as? SuccessResult)?.image
+        }
     }
     Crossfade(targetState = shown, animationSpec = tween(600), label = "backdrop") { current ->
         if (current != null) {
@@ -276,6 +321,7 @@ private fun Hero(item: MediaItem?, modifier: Modifier = Modifier) {
 @Composable
 private fun ShelfRow(
     shelf: Shelf,
+    showing: MediaItem?,
     onFocusItem: (MediaItem) -> Unit,
     onPlay: (MediaItem) -> Unit,
     onConnectJellyfin: () -> Unit,
@@ -284,7 +330,7 @@ private fun ShelfRow(
 ) {
     Box(Modifier.height(168.dp).fillMaxWidth()) {
         when (shelf) {
-            is Shelf.Items -> MediaRow(shelf.items, onFocusItem, onPlay)
+            is Shelf.Items -> MediaRow(shelf.items, showing, onFocusItem, onPlay)
             Shelf.ConnectJellyfin -> Box(Modifier.padding(start = Edge, top = 8.dp)) {
                 ActionCard(
                     title = "Conectar Jellyfin",
@@ -315,14 +361,16 @@ private fun ShelfRow(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun MediaRow(items: List<MediaItem>, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
+fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
         modifier = Modifier.focusRestorer(),
     ) {
         items(items, key = { it.id }) { item ->
-            MediaCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }) { onPlay(item) }
+            MediaCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }, showing = item.id == showing?.id) {
+                onPlay(item)
+            }
         }
     }
 }
@@ -356,14 +404,16 @@ private fun Dock(
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun PosterRow(items: List<MediaItem>, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
+private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
         modifier = Modifier.focusRestorer(),
     ) {
         items(items, key = { it.id }) { item ->
-            PosterCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }) { onPlay(item) }
+            PosterCard(item, Modifier.onFocusChanged { if (it.isFocused) onFocusItem(item) }, showing = item.id == showing?.id) {
+                onPlay(item)
+            }
         }
     }
 }
