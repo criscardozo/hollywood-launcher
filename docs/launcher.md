@@ -39,16 +39,32 @@ las filas del B debajo.
 
 | App enfocada | Fila | De dónde sale | OK |
 |---|---|---|---|
-| Wholphin / Jellyfin | En curso + próximo episodio | API de Jellyfin (`/UserItems/Resume`, `/Shows/NextUp`) | Wholphin reproduce desde donde quedó |
+| Wholphin / Jellyfin | En curso + próximo episodio | API de Jellyfin (`/UserItems/Resume`, `/Shows/NextUp`) | Abre el detalle |
 | YouTube | Nuevo en tus suscripciones (15) | Lista de suscripciones (YouTube Data API) + feed RSS de cada canal | Abre el video en la app de YouTube |
-| Prime Video, Disney+, Max | Fijados de ese servicio | Cargados desde la página de configuración; datos de TMDB vía Seerr | Abre el link fijado, o la app |
+| Prime Video, Disney+, Max | Fijados de ese servicio | Cargados desde la página de configuración; datos de TMDB vía Seerr | Abre el detalle |
 | Las demás | — (se ve el wallpaper) | | |
 
 **Arriba a la derecha:** Entradas (selector de HDMI de TCL, `com.android.tv.action.VIEW_INPUTS`),
 Ajustes (los de la tele) y la hora.
 
 **Fondo:** la imagen de lo enfocado; si no, fondos al azar de la biblioteca de Jellyfin, que cambian
-cada 3 minutos.
+cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la tarjeta.
+
+**Sin tocar el control:** a los 10 s el hero recorre solo la fila enfocada, uno cada 8 s, y la tarjeta
+que muestra tiene una barra que se llena. El foco no se mueve: OK abre lo que elegiste y cualquier
+tecla vuelve todo a su lugar.
+
+## Detalle de películas y series
+
+OK en una película o serie (Jellyfin o fijados) abre su página, como la de Jellyfin (diseño A de
+`docs/mockups/detalle.html`): fondo, año, duración, clasificación, puntaje, a qué hora termina,
+géneros, sinopsis, **Continuar** / **Desde el principio** (o **Reproducir**), y abajo el reparto o las
+temporadas con sus episodios. Un episodio abre su serie, siguiendo desde ese episodio.
+
+**Se reproduce en:** el «G▶» y el nombre del servidor (Ginebra) para Jellyfin, o el ícono de la app
+instalada para Prime Video, Disney+ y Max. Los datos de los fijados salen de TMDB vía Seerr, con la
+clasificación de Australia. Back vuelve a la misma tarjeta. Los videos de YouTube no tienen detalle:
+OK los reproduce.
 
 **Salvapantallas** (`ClockDream`): fondos de Jellyfin que cambian cada 45 s con un fundido, y el reloj
 abajo a la derecha, que se corre unos píxeles cada minuto. Sin Jellyfin, solo el reloj sobre negro.

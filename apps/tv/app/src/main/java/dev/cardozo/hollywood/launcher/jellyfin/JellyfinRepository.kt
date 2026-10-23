@@ -4,6 +4,10 @@ import android.content.Context
 import android.util.Log
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
+import dev.cardozo.hollywood.launcher.details.Action
+import dev.cardozo.hollywood.launcher.details.Details
+import dev.cardozo.hollywood.launcher.details.Person
+import dev.cardozo.hollywood.launcher.details.Season
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +22,7 @@ import org.jellyfin.sdk.api.client.extensions.authenticationApi
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.showApi
+import org.jellyfin.sdk.api.client.extensions.systemApi
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.model.ClientInfo
 import org.jellyfin.sdk.model.api.AuthenticateUserByName
@@ -27,8 +32,12 @@ import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaType
+import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.QuickConnectDto
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 @Serializable
@@ -148,6 +157,40 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
 
     suspend fun disconnect() = store.clear()
 
+    /** The details page of a film or a series. An episode opens its series, continuing from that episode. */
+    suspend fun details(itemId: String): Details? = withContext(Dispatchers.IO) {
+        val session = store.session.first() ?: return@withContext null
+        val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
+        val userId = UUID.fromString(session.userId)
+        val opened = api.libraryApi.getItem(UUID.fromString(itemId), userId).content
+        val episode = opened.takeIf { it.type == BaseItemKind.EPISODE }
+        val item = episode?.seriesId?.let { api.libraryApi.getItem(it, userId).content } ?: opened
+        val server = serverName ?: runCatching { api.systemApi.getPublicSystemInfo().content.serverName }.getOrNull()
+            .also { serverName = it }
+        if (item.type == BaseItemKind.SERIES) api.seriesDetails(userId, item, episode, server) else api.movieDetails(item, server)
+    }
+
+    /** A season's episodes as cards: «E3 · Name», with the runtime underneath. */
+    suspend fun episodes(seriesId: String, seasonId: String): List<MediaItem> = withContext(Dispatchers.IO) {
+        val session = store.session.first() ?: return@withContext emptyList()
+        val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
+        api.showApi.getEpisodes(
+            seriesId = UUID.fromString(seriesId),
+            userId = UUID.fromString(session.userId),
+            seasonId = UUID.fromString(seasonId),
+            fields = CARD_FIELDS,
+        ).content.items.map { episode ->
+            val runtime = episode.runTimeTicks?.let { formatMinutes(it / TICKS_PER_MS / 60_000) }
+            val watched = if (episode.userData?.played == true) "vista" else null
+            api.toMediaItem(episode).copy(
+                title = listOfNotNull(episode.indexNumber?.let { "E$it" }, episode.name).joinToString(" · "),
+                subtitle = listOfNotNull(runtime, watched).joinToString(" · ").ifBlank { null },
+            )
+        }
+    }
+
+    @Volatile private var serverName: String? = null
+
     suspend fun loadHome(): JellyfinHome? = withContext(Dispatchers.IO) {
         val session = store.session.first() ?: return@withContext null
         val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
@@ -188,6 +231,96 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
         api.randomBackdrops(UUID.fromString(session.userId), limit)
     }
 }
+
+private fun ApiClient.movieDetails(item: BaseItemDto, server: String?): Details {
+    val media = toMediaItem(item)
+    val runtimeMs = item.runTimeTicks?.let { it / TICKS_PER_MS }
+    val endsAt = runtimeMs?.let { LocalTime.now().plusSeconds((it - media.positionMs) / 1_000).format(CLOCK) }
+    val actions = if (media.positionMs > 0) {
+        listOf(
+            Action("Continuar", formatMinutes(media.positionMs / 60_000), media),
+            Action("Desde el principio", item = media.copy(positionMs = 0)),
+        )
+    } else {
+        listOf(Action("Reproducir", item = media))
+    }
+    return Details(
+        source = Source.JELLYFIN,
+        sourceName = server,
+        title = item.name.orEmpty(),
+        facts = listOfNotNull(item.productionYear?.toString(), runtimeMs?.let { formatMinutes(it / 60_000) }),
+        rating = item.officialRating,
+        score = item.communityRating?.let(::formatScore),
+        note = endsAt?.let { "termina a las $it" },
+        genres = item.genres.orEmpty(),
+        overview = item.overview,
+        backdropUrl = backdropUrl(item),
+        progress = media.progress,
+        remaining = media.remaining,
+        actions = actions,
+        cast = cast(item),
+    )
+}
+
+private suspend fun ApiClient.seriesDetails(userId: UUID, series: BaseItemDto, opened: BaseItemDto?, server: String?): Details {
+    // The episode the card was for, else the next one up (the first episode of a series not started yet).
+    val next = opened ?: showApi.getNextUp(
+        userId = userId,
+        seriesId = series.id,
+        limit = 1,
+        fields = CARD_FIELDS,
+        enableResumable = true,
+    ).content.items.firstOrNull()
+    val seasons = showApi.getSeasons(seriesId = series.id, userId = userId).content.items
+        // The server names seasons in its own language («Season 1»): number them in Spanish instead.
+        .map { Season(it.id.toString(), it.indexNumber?.let { n -> if (n == 0) "Especiales" else "Temporada $n" } ?: it.name.orEmpty()) }
+    val nextItem = next?.let { toMediaItem(it) }
+    val label = next?.let { listOfNotNull(it.parentIndexNumber?.let { n -> "T$n" }, it.indexNumber?.let { n -> "E$n" }).joinToString(" · ") }
+    val started = (nextItem?.positionMs ?: 0) > 0
+    val actions = when {
+        nextItem == null -> emptyList()
+        started -> listOf(
+            Action("Continuar", label, nextItem),
+            Action("Desde el principio", label, nextItem.copy(positionMs = 0)),
+        )
+        else -> listOf(Action("Reproducir", label, nextItem))
+    }
+    return Details(
+        source = Source.JELLYFIN,
+        sourceName = server,
+        title = series.name.orEmpty(),
+        facts = listOfNotNull(
+            series.productionYear?.toString(),
+            seasons.size.takeIf { it > 0 }?.let { if (it == 1) "1 temporada" else "$it temporadas" },
+        ),
+        rating = series.officialRating,
+        score = series.communityRating?.let(::formatScore),
+        note = next?.let { listOfNotNull(label, it.name?.let { name -> "«$name»" }).joinToString(" ") },
+        genres = series.genres.orEmpty(),
+        overview = series.overview,
+        backdropUrl = backdropUrl(series),
+        progress = nextItem?.progress,
+        remaining = nextItem?.remaining,
+        actions = actions,
+        cast = cast(series),
+        seasons = seasons,
+        seasonId = (next?.seasonId?.toString() ?: seasons.firstOrNull()?.id),
+        seriesId = series.id.toString(),
+    )
+}
+
+private fun ApiClient.cast(item: BaseItemDto): List<Person> =
+    item.people.orEmpty().filter { it.type == PersonKind.ACTOR }.take(12).map { person ->
+        Person(
+            name = person.name.orEmpty(),
+            role = person.role?.takeIf { it.isNotBlank() },
+            imageUrl = person.primaryImageTag?.let { image(person.id, ImageType.PRIMARY, it, 240) },
+        )
+    }
+
+private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
+
+private fun formatScore(score: Float): String = String.format(Locale.forLanguageTag("es"), "%.1f", score)
 
 private suspend fun ApiClient.randomBackdrops(userId: UUID, limit: Int): List<String> =
     libraryApi.getItems(

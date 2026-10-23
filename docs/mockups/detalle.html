@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: pantalla de detalle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #07080b; --fg: #f2f3f5; --dim: rgba(242,243,245,.66); --faint: rgba(242,243,245,.42);
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #1b1d22; color: var(--fg); font-family: var(--font); }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; flex-wrap: wrap; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 10px 0 0; }
+  .chrome .sep { width: 1px; height: 22px; background: #3a3d45; margin: 0 6px; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .notes { width: 320px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+
+  .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: var(--bg); overflow: hidden; }
+  .bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .shade { position: absolute; inset: 0; pointer-events: none; }
+  .clock { position: absolute; top: 44px; right: 72px; font-weight: 600; font-size: 34px; z-index: 5; }
+
+  h2.title { font-size: 92px; line-height: .98; margin: 0 0 22px; letter-spacing: -2px; font-weight: 800; }
+  .meta { display: flex; align-items: center; gap: 18px; font-size: 26px; color: var(--dim); margin-bottom: 14px; flex-wrap: wrap; }
+  .meta .rating { border: 2px solid var(--faint); border-radius: 6px; padding: 0 8px; font-size: 20px; font-weight: 700; }
+  .meta .star { color: #facc15; }
+  .genres { font-size: 22px; color: var(--faint); margin-bottom: 22px; letter-spacing: .3px; }
+  .overview { font-size: 25px; line-height: 1.45; color: var(--dim); margin: 0 0 30px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .buttons { display: flex; gap: 18px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 30px; border-radius: 14px; font-size: 24px; font-weight: 700; background: rgba(255,255,255,.14); color: var(--fg); }
+  .btn.focused { background: #fff; color: #111; transform: scale(1.05); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  .btn.round { padding: 16px 20px; }
+  .btn small { font-weight: 500; opacity: .7; font-size: 20px; }
+  .resume { display: flex; align-items: center; gap: 14px; font-size: 20px; color: var(--dim); margin: 0 0 18px; }
+  .resume .bar { width: 220px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); overflow: hidden; }
+  .resume .bar b { display: block; height: 100%; background: #fff; }
+
+  /* Where it plays from */
+  .source { display: inline-flex; align-items: center; gap: 16px; }
+  .source .logo { width: 64px; height: 64px; border-radius: 15px; display: grid; place-items: center; overflow: hidden; flex: none; }
+  .source .logo svg { width: 100%; height: 100%; display: block; }
+  .source .txt b { display: block; font-size: 24px; }
+  .source .txt span { font-size: 18px; color: var(--faint); }
+  .source .label { font-size: 16px; letter-spacing: 2px; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 2px; font-weight: 700; }
+  .wordmark { font-weight: 800; letter-spacing: -.5px; color: #fff; font-size: 17px; line-height: 1; text-align: center; }
+
+  /* Bottom rows */
+  .rowtitle { font-size: 26px; font-weight: 700; margin: 0 0 18px; }
+  .cast { display: flex; gap: 30px; }
+  .person { width: 132px; text-align: center; font-size: 19px; }
+  .person .face { width: 132px; height: 132px; border-radius: 50%; margin-bottom: 10px; background-size: cover; }
+  .person small { display: block; color: var(--faint); font-size: 16px; margin-top: 2px; }
+  .seasons { display: flex; gap: 12px; margin-bottom: 18px; }
+  .season { padding: 8px 18px; border-radius: 999px; font-size: 20px; background: rgba(255,255,255,.1); color: var(--dim); }
+  .season.on { background: rgba(255,255,255,.9); color: #111; font-weight: 700; }
+  .eps { display: flex; gap: 24px; }
+  .ep { width: 330px; font-size: 19px; }
+  .ep .thumb { height: 186px; border-radius: 12px; background-size: cover; margin-bottom: 10px; position: relative; overflow: hidden; }
+  .ep .thumb .bar { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.3); }
+  .ep .thumb .bar b { display: block; height: 100%; background: #fff; border-radius: 3px; }
+  .ep b { display: block; }
+  .ep small { color: var(--faint); font-size: 16px; }
+  .poster { border-radius: 16px; background-size: cover; box-shadow: 0 30px 70px rgba(0,0,0,.6); }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Pantalla de detalle</h1>
+  <button class="tab" data-layout="A">A · Como Jellyfin</button>
+  <button class="tab" data-layout="B">B · Póster</button>
+  <button class="tab" data-layout="C">C · Cine</button>
+  <button class="tab" data-layout="D">D · Panel</button>
+  <span class="sep"></span>
+  <button class="tab" data-kind="movie">Película</button>
+  <button class="tab" data-kind="series">Serie</button>
+  <span class="sep"></span>
+  <button class="tab" data-source="ginebra">Ginebra</button>
+  <button class="tab" data-source="prime">Prime Video</button>
+  <button class="tab" data-source="disney">Disney+</button>
+  <button class="tab" data-source="max">Max</button>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport"><div class="stage" id="stage"></div></div>
+  <div class="notes" id="notes"></div>
+</div>
+<script>
+// Single quotes: these URLs go inside style="…" attributes.
+const svgUrl = svg => `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29")}')`;
+// Synthetic artwork only: the repo is public, so no real posters or stills.
+function art(seed, w = 1920, h = 1080) {
+  const p = [["#0f2a3a", "#1f5f7a", "#e8a25a"], ["#2a1638", "#6b2f6b", "#f2b46b"], ["#10261c", "#2f6b52", "#e9d27a"], ["#2b1414", "#7a2f2f", "#f0c27a"], ["#14182b", "#35407a", "#9ad1f0"]][seed % 5];
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${h}' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='${p[0]}'/><stop offset='.62' stop-color='${p[1]}'/><stop offset='1' stop-color='${p[0]}'/></linearGradient>
+    <radialGradient id='g' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='${p[2]}' stop-opacity='.85'/><stop offset='1' stop-color='${p[2]}' stop-opacity='0'/></radialGradient></defs>
+    <rect width='${w}' height='${h}' fill='url(#s)'/><circle cx='${w * .7}' cy='${h * .55}' r='${h * .4}' fill='url(#g)'/>
+    <circle cx='${w * .7}' cy='${h * .55}' r='${h * .07}' fill='${p[2]}'/>
+    <path d='M0 ${h * .78} Q ${w * .3} ${h * .68} ${w * .55} ${h * .8} T ${w} ${h * .74} V ${h} H 0 Z' fill='${p[0]}' opacity='.9'/>
+    <path d='M${w * .82} ${h * .8} l 18 -${h * .26} l 18 ${h * .26} z' fill='${p[0]}'/></svg>`;
+  return svgUrl(svg);
+}
+function face(i) {
+  const c = ["#c08457", "#8d5a3b", "#e0b48a", "#6b4630", "#b07a55", "#d9a07a"][i % 6];
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='#2a2f3a'/><circle cx='50' cy='42' r='20' fill='${c}'/><path d='M14 100 Q50 58 86 100 Z' fill='#4a5468'/></svg>`;
+  return svgUrl(svg);
+}
+
+const GINEBRA = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><mask id="play"><path d="M75.62 42.16 L109.94 64.00 L75.62 85.84 Z" fill="#fff" stroke="#fff" stroke-width="8.3" stroke-linejoin="round"/></mask></defs><rect width="128" height="128" rx="30" fill="#141a26"/><path d="M43.62 91.92Q34.12 91.92 27.5 88.4Q20.87 84.87 17.39 78.67Q13.9 72.46 13.9 64.34Q13.9 55.77 17.62 49.41Q21.33 43.05 28.3 39.57Q35.27 36.08 45.08 36.08Q48.83 36.08 52.47 36.73Q56.11 37.38 59.17 38.57Q62.24 39.76 64.3 41.29L59.48 53.93Q55.95 51.94 52.51 51.02Q49.06 50.1 45.23 50.1Q37.95 50.1 34.47 53.7Q30.98 57.3 30.98 64.34Q30.98 71.24 34.47 74.72Q37.95 78.21 44.62 78.21Q46.53 78.21 48.98 77.83Q51.44 77.44 54.04 76.68L51.13 82.57V71.24H41.17V59.9H64.46V87.63Q61.39 89.01 57.98 89.97Q54.58 90.92 50.94 91.42Q47.3 91.92 43.62 91.92Z" fill="#f2f7ff"/><g mask="url(#play)"><path d="M72.18 35.61 L94.49 49.80 L72.18 64.00 Z" fill="#f472b6"/><path d="M116.80 64.00 L94.49 78.20 L94.49 49.80 Z" fill="#a78bfa"/><path d="M72.18 92.39 L72.18 64.00 L94.49 78.20 Z" fill="#7c3aed"/><path d="M92.78 53.08 L92.78 74.92 L75.62 64.00 Z" fill="#c084fc"/></g></svg>`;
+
+// Streaming services as plain wordmarks; in the app this would be the installed app's own icon.
+const SOURCES = {
+  ginebra: { name: "Ginebra", sub: "Tu Jellyfin · se abre en Wholphin", logo: GINEBRA, color: "#a78bfa" },
+  prime: { name: "Prime Video", sub: "Fijado · se abre en la app", logo: `<div class="wordmark" style="font-size:15px">prime<br>video</div>`, bg: "#0f79af", color: "#38bdf8" },
+  disney: { name: "Disney+", sub: "Fijado · se abre en la app", logo: `<div class="wordmark">Disney+</div>`, bg: "linear-gradient(135deg,#0b1c4a,#1e6fd9)", color: "#60a5fa" },
+  max: { name: "Max", sub: "Fijado · se abre en la app", logo: `<div class="wordmark" style="font-size:24px">max</div>`, bg: "#002be7", color: "#93c5fd" },
+};
+
+const ITEMS = {
+  movie: {
+    title: "La costa de los faros", year: "2024", length: "2 h 4 min", rating: "M", score: "7,8", ends: "termina a las 21:42",
+    genres: "Drama · Misterio · Basada en una novela",
+    overview: "Una cartógrafa vuelve al pueblo donde creció para trazar el último tramo de costa sin mapa, y encuentra que los faros se apagan uno por uno siguiendo un orden que solo su padre conocía.",
+    resume: { at: "1 h 12 min", pct: 58, left: "Quedan 52 min" }, seed: 0,
+    cast: [["Lucía Ferrán", "Inés"], ["Tomás Albín", "Bruno"], ["Mara Quiroga", "Alma"], ["Ezequiel Pons", "El farero"], ["Ruth Sandoval", "Delia"], ["Iván Morel", "Comisario"]],
+  },
+  series: {
+    title: "Bahía Gris", year: "2025–", length: "2 temporadas", rating: "MA15+", score: "8,3", ends: "T1 · E4 «El segundo ferry»",
+    genres: "Thriller · Comedia negra",
+    overview: "Un pueblo de pescadores con un secreto bien guardado recibe a un nuevo alcalde que no cree en nada. Cada episodio, una tradición local más difícil de explicar.",
+    resume: { at: "T1 · E4", pct: 35, left: "Quedan 27 min" }, seed: 1,
+    episodes: [["E3 · La niebla", "44 min", 100], ["E4 · El segundo ferry", "41 min", 35], ["E5 · Marea baja", "47 min", 0], ["E6 · Los que se quedan", "43 min", 0]],
+  },
+};
+
+const state = { layout: "A", kind: "movie", source: "ginebra" };
+
+function sourceBadge(s, opts = {}) {
+  const src = SOURCES[s];
+  return `<div class="source" style="${opts.style || ""}">
+    <div class="logo" style="background:${src.bg || "transparent"}">${src.logo}</div>
+    <div class="txt">${opts.label ? `<span class="label">Se reproduce en</span>` : ""}<b>${src.name}</b><span>${src.sub}</span></div>
+  </div>`;
+}
+function metaRow(it) {
+  return `<div class="meta"><span>${it.year}</span><span>${it.length}</span><span class="rating">${it.rating}</span><span><span class="star">★</span> ${it.score}</span><span>${it.ends}</span></div>`;
+}
+function buttons(it, kind) {
+  const resume = kind === "series" ? `Continuar <small>${it.resume.at}</small>` : `Continuar <small>${it.resume.at}</small>`;
+  return `<div class="buttons">
+    <span class="btn focused">▶ ${resume}</span>
+    <span class="btn">↺ Desde el principio</span>
+    ${kind === "series" ? `<span class="btn">Temporadas</span>` : ""}
+    <span class="btn round">♡</span>
+  </div>`;
+}
+function resumeBar(it) {
+  return `<div class="resume"><div class="bar"><b style="width:${it.resume.pct}%"></b></div>${it.resume.left}</div>`;
+}
+function bottomRow(it, kind, left = 96, width = null) {
+  const w = width ? `width:${width}px;` : "";
+  if (kind === "movie") return `<div style="position:absolute;left:${left}px;bottom:70px;${w}">
+      <div class="rowtitle">Reparto</div>
+      <div class="cast">${it.cast.map((p, i) => `<div class="person"><div class="face" style="background-image:${face(i)}"></div>${p[0]}<small>${p[1]}</small></div>`).join("")}</div></div>`;
+  return `<div style="position:absolute;left:${left}px;bottom:60px;${w}">
+      <div class="seasons"><span class="season on">Temporada 1</span><span class="season">Temporada 2</span></div>
+      <div class="eps">${it.episodes.map((e, i) => `<div class="ep"><div class="thumb" style="background-image:${art(i + 2, 640, 360)}">${e[2] ? `<div class="bar"><b style="width:${e[2]}%"></b></div>` : ""}</div><b>${e[0]}</b><small>${e[1]}</small></div>`).join("")}</div></div>`;
+}
+
+const LAYOUTS = {
+  A: {
+    name: "A · Como Jellyfin",
+    notes: `<h2>A · Como Jellyfin</h2><ul>
+      <li>Fondo a pantalla completa, info arriba a la izquierda, como en la app de Jellyfin.</li>
+      <li>«Se reproduce en» va debajo de los botones, con el logo y una línea de qué app abre.</li>
+      <li>Abajo: reparto (película) o temporadas y episodios (serie).</li>
+      <li>Es la más parecida a lo que ya conocés.</li></ul>
+      <h2>Recomendada</h2><p>Familiar, entra todo sin apretar, y el origen queda junto al botón que lo usa.</p>`,
+    render(it, kind, s) {
+      return `<div class="bg" style="background-image:${art(it.seed)}"></div>
+        <div class="shade" style="background:linear-gradient(90deg,rgba(7,8,11,.95) 0%,rgba(7,8,11,.75) 38%,rgba(7,8,11,.1) 72%),linear-gradient(0deg,rgba(7,8,11,.98) 0%,rgba(7,8,11,.5) 34%,transparent 58%)"></div>
+        <div class="clock">20:38</div>
+        <div style="position:absolute;left:96px;top:96px;width:960px">
+          <h2 class="title">${it.title}</h2>${metaRow(it)}<div class="genres">${it.genres}</div>
+          <p class="overview">${it.overview}</p>${resumeBar(it)}${buttons(it, kind)}
+          <div style="margin-top:30px">${sourceBadge(s, { label: true })}</div>
+        </div>${bottomRow(it, kind)}`;
+    },
+  },
+  B: {
+    name: "B · Póster",
+    notes: `<h2>B · Póster</h2><ul>
+      <li>Póster a la izquierda con el origen debajo, como una carátula con su sello.</li>
+      <li>La info a la derecha; el fondo queda más oscuro y desenfocado.</li>
+      <li>Para fijados de Prime/Disney+/Max funciona bien porque Seerr siempre tiene póster.</li></ul>`,
+    render(it, kind, s) {
+      return `<div class="bg" style="background-image:${art(it.seed)};filter:blur(18px) brightness(.55);transform:scale(1.1)"></div>
+        <div class="shade" style="background:linear-gradient(0deg,rgba(7,8,11,.95) 0%,rgba(7,8,11,.3) 50%,rgba(7,8,11,.5) 100%)"></div>
+        <div class="clock">20:38</div>
+        <div style="position:absolute;left:96px;top:96px;width:400px">
+          <div class="poster" style="width:400px;height:600px;background-image:${art(it.seed, 600, 900)}"></div>
+          <div style="margin-top:26px">${sourceBadge(s)}</div>
+        </div>
+        <div style="position:absolute;left:576px;top:110px;width:1150px">
+          <h2 class="title" style="font-size:80px">${it.title}</h2>${metaRow(it)}<div class="genres">${it.genres}</div>
+          <p class="overview">${it.overview}</p>${resumeBar(it)}${buttons(it, kind)}
+        </div>${bottomRow(it, kind, 576)}`;
+    },
+  },
+  C: {
+    name: "C · Cine",
+    notes: `<h2>C · Cine</h2><ul>
+      <li>La imagen manda: la info baja al pie y arriba queda casi limpia.</li>
+      <li>El origen va arriba a la derecha, grande, como el logo de un canal.</li>
+      <li>Reparto o episodios aparecen al bajar (acá se ve el borde de la fila).</li></ul>`,
+    render(it, kind, s) {
+      return `<div class="bg" style="background-image:${art(it.seed)}"></div>
+        <div class="shade" style="background:linear-gradient(0deg,rgba(7,8,11,.98) 0%,rgba(7,8,11,.82) 30%,rgba(7,8,11,.1) 62%),linear-gradient(180deg,rgba(7,8,11,.5) 0%,transparent 20%)"></div>
+        <div style="position:absolute;top:56px;right:72px">${sourceBadge(s, { label: true })}</div>
+        <div style="position:absolute;left:96px;bottom:200px;width:1300px">
+          <h2 class="title" style="font-size:110px">${it.title}</h2>${metaRow(it)}
+          <p class="overview" style="-webkit-line-clamp:2;max-width:1100px">${it.overview}</p>${buttons(it, kind)}
+        </div>
+        <div style="position:absolute;left:96px;bottom:-60px;display:flex;gap:24px;opacity:.75">
+          ${kind === "movie" ? it.cast.map((p, i) => `<div class="person"><div class="face" style="background-image:${face(i)}"></div></div>`).join("")
+            : it.episodes.map((e, i) => `<div class="ep"><div class="thumb" style="background-image:${art(i + 2, 640, 360)}"></div></div>`).join("")}
+        </div>`;
+    },
+  },
+  D: {
+    name: "D · Panel",
+    notes: `<h2>D · Panel</h2><ul>
+      <li>Panel sólido a la izquierda con todo el texto; la imagen a la derecha, sin oscurecer.</li>
+      <li>El origen encabeza el panel: lo primero que leés es de dónde sale.</li>
+      <li>Episodios o reparto en lista dentro del panel. Más «ficha» que «afiche».</li></ul>`,
+    render(it, kind, s) {
+      const list = kind === "movie"
+        ? `<div class="rowtitle" style="margin-top:34px">Reparto</div><div class="cast" style="gap:22px">${it.cast.slice(0, 4).map((p, i) => `<div class="person" style="width:112px"><div class="face" style="width:112px;height:112px;background-image:${face(i)}"></div>${p[0]}<small>${p[1]}</small></div>`).join("")}</div>`
+        : `<div class="rowtitle" style="margin-top:34px">Temporada 1</div>${it.episodes.slice(0, 3).map((e, i) => `<div style="display:flex;gap:18px;align-items:center;margin-bottom:14px;font-size:21px"><div style="width:170px;height:96px;border-radius:10px;background:${art(i + 2, 640, 360)} center/cover"></div><div><b>${e[0]}</b><div style="color:var(--faint);font-size:17px">${e[1]}${e[2] && e[2] < 100 ? " · a medias" : e[2] === 100 ? " · vista" : ""}</div></div></div>`).join("")}`;
+      return `<div class="bg" style="left:760px;background-image:${art(it.seed)}"></div>
+        <div class="shade" style="left:760px;background:linear-gradient(90deg,#0c0d12 0%,rgba(12,13,18,0) 18%)"></div>
+        <div style="position:absolute;left:0;top:0;bottom:0;width:860px;background:#0c0d12"></div>
+        <div class="clock">20:38</div>
+        <div style="position:absolute;left:80px;top:70px;width:700px">
+          ${sourceBadge(s, { label: true })}
+          <h2 class="title" style="font-size:68px;margin-top:40px">${it.title}</h2>${metaRow(it)}<div class="genres">${it.genres}</div>
+          <p class="overview" style="font-size:23px">${it.overview}</p>${resumeBar(it)}
+          <div class="buttons" style="flex-wrap:wrap"><span class="btn focused">▶ Continuar</span><span class="btn">↺ Principio</span><span class="btn round">♡</span></div>
+          ${list}
+        </div>`;
+    },
+  },
+};
+
+function render() {
+  const it = ITEMS[state.kind];
+  document.getElementById("stage").innerHTML = LAYOUTS[state.layout].render(it, state.kind, state.source);
+  document.getElementById("notes").innerHTML = LAYOUTS[state.layout].notes;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected",
+    t.dataset.layout === state.layout || t.dataset.kind === state.kind || t.dataset.source === state.source));
+  location.hash = `${state.layout}-${state.kind}-${state.source}`;
+}
+function fit() {
+  const vp = document.getElementById("viewport");
+  document.getElementById("stage").style.transform = `scale(${vp.clientWidth / 1920})`;
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  if (t.dataset.layout) state.layout = t.dataset.layout;
+  if (t.dataset.kind) state.kind = t.dataset.kind;
+  if (t.dataset.source) state.source = t.dataset.source;
+  render();
+});
+const [l, k, s] = location.hash.slice(1).split("-");
+if (LAYOUTS[l]) state.layout = l;
+if (ITEMS[k]) state.kind = k;
+if (SOURCES[s]) state.source = s;
+addEventListener("resize", fit);
+render(); fit();
+</script>
+</body>
+</html>

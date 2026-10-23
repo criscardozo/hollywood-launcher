@@ -84,7 +84,7 @@ private const val IDLE_BEFORE_ROTATING_MS = 10_000L
 const val HERO_ROTATE_MS = 8_000L
 
 /** The interface's own default: the smallest scroll that makes the focused item fully visible. */
-private val ScrollOnlyWhenHidden = object : BringIntoViewSpec {}
+internal val ScrollOnlyWhenHidden = object : BringIntoViewSpec {}
 
 /**
  * Layout D from docs/mockups/launcher-2.html: a hero with the focused item's info, the top shelf of
@@ -97,7 +97,10 @@ fun HomeScreen(
     onConnectYouTube: () -> Unit,
     onOpenSettings: () -> Unit,
     onAllApps: () -> Unit,
+    onOpenDetails: (MediaItem) -> Unit,
     focusDockSignal: Int,
+    /** False while a page (details) is drawn over Home: the idle hero pauses, and focus returns on true. */
+    active: Boolean = true,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -122,7 +125,7 @@ fun HomeScreen(
     var keyPresses by remember { mutableIntStateOf(0) }
     var showing by remember { mutableStateOf<MediaItem?>(null) }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val onScreen = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    val onScreen = active && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
     LaunchedEffect(keyPresses, row, focusedItem, onScreen) {
         showing = null
         if (!onScreen || row.size < 2) return@LaunchedEffect
@@ -137,9 +140,19 @@ fun HomeScreen(
 
     // With the dock focused, the hero shows the first item of that app's shelf (once it has loaded).
     val heroItem = showing ?: focusedItem ?: shelfItems.firstOrNull()
-    val play: (MediaItem) -> Unit = { context.open(it, settings.player) }
+    // Films and series open their details page first; a video plays straight away.
+    val play: (MediaItem) -> Unit = {
+        if (it.source == Source.YOUTUBE) context.open(it, settings.player) else onOpenDetails(it)
+    }
 
     val dockFocus = remember { FocusRequester() }
+    // Back from details: the restorer puts focus on the card that opened it.
+    val pageFocus = remember { FocusRequester() }
+    var wasActive by remember { mutableStateOf(active) }
+    LaunchedEffect(active) {
+        if (active && !wasActive) runCatching { pageFocus.requestFocus() }
+        wasActive = active
+    }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     // Back on the shelf or the dock, the page returns to the top so the hero is visible again. The wait lets
@@ -195,7 +208,7 @@ fun HomeScreen(
         // key press and the page dip down before toTop() pulled it back: scroll only when something is hidden.
         CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
             Column(
-                Modifier.fillMaxSize().verticalScroll(scroll),
+                Modifier.fillMaxSize().focusRequester(pageFocus).focusRestorer().verticalScroll(scroll),
             ) {
                 Hero(heroItem, Modifier.height(244.dp).padding(start = Edge, top = 56.dp))
 

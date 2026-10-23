@@ -4,9 +4,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,8 +26,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +54,7 @@ import dev.cardozo.hollywood.launcher.system.openSettings
 import dev.cardozo.hollywood.launcher.ui.Dim
 import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -59,9 +65,18 @@ private fun cardBorder() = CardDefaults.border(
     focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = CardShape),
 )
 
+@OptIn(ExperimentalFoundationApi::class) // BringIntoViewRequester
 @Composable
 fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean = false, onClick: () -> Unit) {
-    Column(modifier.width(180.dp)) {
+    // Focus brings the card into view; this brings the title under it too, or the last row shows it cut off.
+    val wholeCard = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    Column(
+        modifier
+            .width(180.dp)
+            .bringIntoViewRequester(wholeCard)
+            .onFocusChanged { if (it.hasFocus) scope.launch { wholeCard.bringIntoView() } },
+    ) {
         Card(
             onClick = onClick,
             shape = CardDefaults.shape(CardShape),
