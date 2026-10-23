@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Hollywood para Mac: panel de la barra de menú</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #0b0d12; --card: #141a26; --raised: #1c2434; --text: #f2f7ff; --dim: rgba(242,247,255,.6); --faint: rgba(242,247,255,.38);
+    --pink: #f472b6; --violet: #a78bfa; --deep: #7c3aed; --accent: #c084fc;
+    --font: -apple-system, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: var(--font); color: var(--text); background: #1b1d22; }
+  .chrome { display: flex; gap: 10px; align-items: center; padding: 14px 20px; font-size: 14px; }
+  .chrome h1 { font-size: 15px; margin: 0 10px 0 0; }
+  .tab { background: #2a2d34; color: var(--text); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--text); color: #111; }
+  .wrap { display: flex; gap: 24px; padding: 0 20px 20px; }
+  .desk { flex: 1; height: 640px; border-radius: 12px; position: relative; overflow: hidden;
+    background: radial-gradient(120% 120% at 70% 20%, #3b4a7a, #1a1f33 55%, #0d0f18); }
+  .menubar { height: 28px; background: rgba(20,22,30,.55); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 0 14px; font-size: 13px; color: rgba(255,255,255,.9); }
+  .menubar .mine { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 5px; background: rgba(255,255,255,.22); }
+  .menubar .mine svg { width: 16px; height: 16px; }
+  .panel { position: absolute; top: 34px; right: 128px; width: 320px; background: rgba(14,17,24,.92); backdrop-filter: blur(30px);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.55); padding: 14px; font-size: 13px; }
+  .notes { width: 320px; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--text); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--card); display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+  .logo b { background: linear-gradient(135deg, var(--pink), var(--violet), var(--deep)); -webkit-background-clip: text; color: transparent; }
+  .status small { display: block; color: var(--dim); font-size: 11px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; display: inline-block; margin-right: 5px; }
+  .key { width: 38px; height: 38px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; font-size: 15px; color: var(--text); flex: none; }
+  .key.sm { width: 32px; height: 32px; font-size: 13px; }
+  .key.power { background: rgba(244,114,182,.18); color: var(--pink); }
+  .dpad { position: relative; width: 176px; height: 176px; border-radius: 50%; background: var(--raised); margin: 14px auto; }
+  .dpad span { position: absolute; color: var(--dim); font-size: 16px; }
+  .dpad .ok { position: absolute; inset: 50px; border-radius: 50%; background: var(--card); display: grid; place-items: center; font-weight: 700; font-size: 14px; box-shadow: 0 0 0 2px rgba(192,132,252,.5); }
+  .apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+  .app { height: 38px; border-radius: 9px; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; }
+  .type { margin-top: 12px; height: 32px; border-radius: 8px; background: var(--card); border: 1px solid rgba(255,255,255,.08); color: var(--faint); display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
+  .hint { margin-top: 10px; color: var(--faint); font-size: 11px; text-align: center; }
+  kbd { font-family: inherit; background: var(--raised); border-radius: 4px; padding: 1px 5px; font-size: 10.5px; color: var(--dim); }
+  .bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+  .bar b { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--violet)); }
+  .chip { padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .now { border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .list .item { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 7px; font-size: 12.5px; }
+  .list .item:hover, .list .item.sel { background: rgba(255,255,255,.07); }
+  .list .sw { width: 22px; height: 22px; border-radius: 6px; }
+  .sep { height: 1px; background: rgba(255,255,255,.08); margin: 12px -14px; }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Hollywood para Mac · panel</h1>
+  <button class="tab" data-l="A">A · Control completo</button>
+  <button class="tab" data-l="B">B · Compacto</button>
+  <button class="tab" data-l="C">C · Qué está sonando</button>
+</div>
+<div class="wrap">
+  <div class="desk">
+    <div class="menubar"><span>🔋</span><span>Wi‑Fi</span>
+      <span class="mine"><svg viewBox="0 0 16 16"><text x="0" y="12.5" font-size="12" font-weight="800" fill="#fff" font-family="-apple-system">H</text><path d="M10 4 L15 8 L10 12 Z" fill="#fff"/></svg></span>
+      <span>vie 23 oct 21:14</span></div>
+    <div class="panel" id="panel"></div>
+  </div>
+  <div class="notes" id="notes"></div>
+</div>
+<script>
+const APPS = [["YouTube", "#0f0f0f", "#ff2d2d"], ["Jellyfin", "linear-gradient(135deg,#6a2c91,#00a4dc)", "#fff"], ["Prime", "#0f171e", "#1fa2ff"], ["Disney+", "linear-gradient(135deg,#0b1f6b,#1a4fd6)", "#fff"],
+  ["Max", "#002be7", "#fff"], ["Spotify", "#121212", "#1ed760"], ["9Now", "#0a2a66", "#fff"], ["7plus", "#e2001a", "#fff"], ["10 Play", "#111", "#ff2a3c"], ["SBS", "#ffcc00", "#111"], ["iview", "#0b0b0b", "#2ff3e0"]];
+const header = `<div class="row"><div class="logo"><b>H▶</b></div><div class="status" style="flex:1"><b>Hollywood</b><small><i class="dot"></i>Wholphin · Volumen 18%</small></div><div class="key sm">⋯</div><div class="key sm power">⏻</div></div>`;
+const dpad = (size = 176) => `<div class="dpad" style="width:${size}px;height:${size}px"><span style="top:8px;left:50%;transform:translateX(-50%)">▲</span><span style="bottom:8px;left:50%;transform:translateX(-50%)">▼</span><span style="left:10px;top:50%;transform:translateY(-50%)">◀</span><span style="right:10px;top:50%;transform:translateY(-50%)">▶</span><div class="ok" style="inset:${size * .28}px">OK</div></div>`;
+const L = {
+  A: {
+    notes: `<h2>A · Control completo</h2><ul><li>Como el control del iPhone: cruz grande, Atrás/Home/volumen, las 11 apps en grilla y un campo para escribir.</li><li>Con el panel abierto, el teclado maneja la tele: flechas, ↩ OK, esc Atrás, ⌫ borrar.</li><li>Todo a la vista, sin menús.</li></ul><h2>Recomendada</h2><p>Se usa con el mouse o con el teclado, y es la misma app que ya conocés del iPhone.</p>`,
+    html: () => header + dpad() + `<div class="row" style="justify-content:center;gap:12px"><div class="key">↩︎</div><div class="key">⌂</div><div class="key">−</div><div class="key">＋</div><div class="key">🔇</div></div>
+      <div class="apps">${APPS.map(a => `<div class="app" style="background:${a[1]};color:${a[2]}">${a[0]}</div>`).join("")}<div class="app" style="background:var(--raised);color:var(--dim)">Todas</div></div>
+      <div class="type">Escribir en la tele…</div><div class="hint"><kbd>←↑↓→</kbd> mover · <kbd>↩</kbd> OK · <kbd>esc</kbd> atrás · <kbd>⌥⌘H</kbd> abrir</div>`,
+  },
+  B: {
+    notes: `<h2>B · Compacto</h2><ul><li>Pensado para el teclado: la cruz es chica y casi decorativa.</li><li>Volumen como barra a la derecha; las apps en una tira que se desliza.</li><li>Ocupa la mitad de alto.</li></ul>`,
+    html: () => header + `<div class="row" style="margin-top:12px;align-items:stretch"><div style="flex:none;margin:-14px 0">${dpad(120)}</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:4px 0 4px 8px"><div class="row" style="gap:8px"><div class="key sm">↩︎</div><div class="key sm">⌂</div><div class="key sm">🔇</div></div>
+      <div><div style="font-size:11px;color:var(--dim);margin-bottom:5px">Volumen 18%</div><div class="bar"><b style="width:18%"></b></div><div class="row" style="justify-content:space-between;margin-top:6px"><div class="key sm">−</div><div class="key sm">＋</div></div></div></div></div>
+      <div class="row" style="gap:6px;margin-top:12px;overflow:hidden">${APPS.slice(0, 6).map(a => `<span class="chip" style="background:${a[1]};color:${a[2]}">${a[0]}</span>`).join("")}</div>
+      <div class="hint">Con el panel abierto, el teclado es el control</div>`,
+  },
+  C: {
+    notes: `<h2>C · Qué está sonando</h2><ul><li>Arriba, una tarjeta con la app que está abierta en la tele y el volumen (lo que la tele informa).</li><li>Las apps en lista, como un menú de Mac; la cruz en el medio.</li><li>Más «panel de estado», un poco más alto.</li></ul>`,
+    html: () => header + `<div class="now" style="background:linear-gradient(135deg,#6a2c91,#00a4dc)"><div style="font-size:10px;letter-spacing:1.5px;opacity:.8;font-weight:700">EN LA TELE</div><div style="font-size:17px;font-weight:800;margin:3px 0 8px">Jellyfin · Wholphin</div>
+      <div class="row"><span>🔈</span><div class="bar" style="flex:1;background:rgba(255,255,255,.3)"><b style="width:18%;background:#fff"></b></div><span style="font-size:11px">18%</span></div></div>
+      ${dpad(150)}<div class="row" style="justify-content:center;gap:12px"><div class="key sm">↩︎</div><div class="key sm">⌂</div><div class="key sm">−</div><div class="key sm">＋</div></div>
+      <div class="sep"></div><div class="list">${APPS.slice(0, 5).map((a, i) => `<div class="item ${i === 1 ? "sel" : ""}"><span class="sw" style="background:${a[1]}"></span>${a[0]}</div>`).join("")}<div class="item" style="color:var(--dim)">Más apps…</div></div>`,
+  },
+};
+let cur = location.hash.slice(1) || "A";
+function render() {
+  document.getElementById("panel").innerHTML = L[cur].html();
+  document.getElementById("notes").innerHTML = L[cur].notes;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.l === cur));
+  location.hash = cur;
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => { cur = t.dataset.l; render(); });
+render();
+</script>
+</body>
+</html>

@@ -7,7 +7,7 @@ AVD      ?= tv-gtv-31
 APK      := apps/tv/app/build/outputs/apk/debug/app-debug.apk
 export JAVA_HOME
 
-.PHONY: tv-build tv-emulator tv-run tv-screenshot ios-project ios-build
+.PHONY: tv-build tv-emulator tv-run tv-screenshot ios-project ios-build mac-build mac-run
 
 ## Launcher (apps/tv)
 
@@ -33,3 +33,15 @@ ios-project:
 ios-build: ios-project
 	cd apps/ios && xcodebuild -project HollywoodRemote.xcodeproj -scheme HollywoodRemote \
 		-destination 'generic/platform=iOS Simulator' -quiet build
+
+## Mac menu-bar remote (apps/ios/HollywoodMenu, same XcodeGen project)
+
+MAC_APP := /tmp/hollywood-menu/Build/Products/Debug/HollywoodMenu.app
+
+mac-build: ios-project
+	cd apps/ios && xcodebuild -project HollywoodRemote.xcodeproj -scheme HollywoodMenu \
+		-destination 'platform=macOS' -derivedDataPath /tmp/hollywood-menu -allowProvisioningUpdates -quiet build
+
+mac-run: mac-build
+	pkill -x HollywoodMenu || true
+	open $(MAC_APP)

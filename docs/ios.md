@@ -85,3 +85,21 @@ datos con un widget); se verifica cuando se llegue a los extras. Nada de esto pa
 3. Abrir apps y teclado: falta confirmar en la tele.
 4. API del launcher: apps con íconos, fijados y Jellyfin desde el celular.
 5. Extras de iOS: Centro de Control, atajos de Siri, widget.
+
+## App de Mac (`HollywoodMenu`)
+
+El mismo control en la barra de menú de la Mac (diseño A de `docs/mockups/mac.html`): un «H▶» arriba a
+la derecha que abre un panel con la cruz y OK, Atrás, Inicio, volumen, silencio, encendido, las apps de
+la casa y un campo para escribir en la tele. Sin ícono en el Dock.
+
+- **Teclado:** con el panel abierto, las flechas mueven, ↩ es OK, esc o ⌫ Atrás, `h` Inicio, espacio
+  pausa, `+`/`-` volumen y `m` silencio. Mientras se escribe en el campo de texto, las teclas son texto.
+  **⌥⌘H** abre y cierra el panel desde cualquier app (atajo de Carbon: no pide permiso de Accesibilidad).
+- **Comparte** con el iPhone el modelo, el descubrimiento, las apps y el tema (`apps/ios/Shared/`), y
+  RemoteKit. Es otro target del mismo `project.yml`: bundle `dev.cardozo.hollywood-menu`, equipo
+  `FA737M2U79`.
+- **Emparejamiento:** igual que en el iPhone; la tele la lista con el nombre de la Mac. La primera vez
+  macOS pide permiso de **Red local**.
+- `make mac-build` / `make mac-run`. Menú «⋯» → **Abrir al iniciar sesión**. Para revisar el panel sin
+  abrirlo: `HollywoodMenu -demo YES -snapshot /tmp/panel.png` lo dibuja en un PNG y sale.
+- Falta probarla contra la tele (emparejar muestra un código en pantalla).

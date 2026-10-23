@@ -1,7 +1,9 @@
 import Foundation
 import Observation
 import RemoteKit
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// Everything the screens need: which TV, whether it is paired and connected, what it reports, and
 /// the commands. One TV at a time; it is remembered between launches.
@@ -63,7 +65,7 @@ final class RemoteModel {
         do {
             let identity = try ClientIdentity.keychain()
             let session = RemoteSession(host: host, identity: identity, pinnedFingerprint: tvKey,
-                                        deviceName: UIDevice.current.name)
+                                        deviceName: Device.name)
             try await session.connect()
             self.session = session
             state = session.current
@@ -87,7 +89,7 @@ final class RemoteModel {
     private static func explain(_ error: Error) -> String {
         let text = String(describing: error)
         if text.contains("handshake") || text.contains("EOF") {
-            return "La tele no reconoce este iPhone (hay que emparejar de nuevo), o está apagada del todo."
+            return "La tele no reconoce \(Device.this) (hay que emparejar de nuevo), o está apagada del todo."
         }
         if text.contains("connectTimeout") || text.contains("timed out") || text.contains("refused") {
             return "La tele no responde. ¿Está prendida y en la misma red?"
@@ -112,7 +114,7 @@ final class RemoteModel {
         do {
             ClientIdentity.deleteKeychain()
             let identity = try ClientIdentity.keychain()
-            let tvKey = try await Pairing.pair(host: host, identity: identity, clientName: UIDevice.current.name) { [weak self] in
+            let tvKey = try await Pairing.pair(host: host, identity: identity, clientName: Device.name) { [weak self] in
                 try await withCheckedThrowingContinuation { continuation in
                     Task { @MainActor in
                         self?.codeContinuation = continuation
@@ -162,13 +164,13 @@ final class RemoteModel {
 
     func press(_ key: KeyCode, _ direction: KeyDirection = .short) {
         guard let session else { Task { await connectIfNeeded() }; return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Device.tap()
         session.send(key, direction)
     }
 
     func launch(_ app: TVApp) {
         guard let session else { return }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Device.tap(strong: true)
         session.launch(app.link)
     }
 
@@ -180,5 +182,31 @@ final class RemoteModel {
     var currentAppName: String? {
         guard let package = state.currentApp else { return nil }
         return TVApp.house.first { $0.package == package }?.name ?? package
+    }
+}
+
+/// What differs between the iPhone and the Mac: the name the TV lists us by, and the tap under a key.
+enum Device {
+    @MainActor static var name: String {
+        #if canImport(UIKit)
+        UIDevice.current.name
+        #else
+        Host.current().localizedName ?? "Mac"
+        #endif
+    }
+
+    /// «este iPhone» or «esta Mac», for messages.
+    static var this: String {
+        #if os(macOS)
+        "esta Mac"
+        #else
+        "este iPhone"
+        #endif
+    }
+
+    @MainActor static func tap(strong: Bool = false) {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: strong ? .medium : .light).impactOccurred()
+        #endif
     }
 }
