@@ -26,10 +26,15 @@ data class Settings(
     val adminToken: String = "",
     val pinsJson: String = "[]",
     val player: Player = Player.WHOLPHIN,
+    /** Where the weather in the top bar is for, chosen on the settings page. */
+    val weatherPlace: String = "",
+    val weatherLatitude: Double? = null,
+    val weatherLongitude: Double? = null,
 ) {
     val youtubeConfigured get() = googleClientId.isNotBlank() && googleClientSecret.isNotBlank()
     val youtubeConnected get() = youtubeConfigured && youtubeRefreshToken.isNotBlank()
     val seerrConfigured get() = seerrUrl.isNotBlank() && seerrApiKey.isNotBlank()
+    val weatherConfigured get() = weatherLatitude != null && weatherLongitude != null
 }
 
 private val Context.dataStore by preferencesDataStore(name = "launcher")
@@ -46,6 +51,9 @@ class LauncherSettings(private val context: Context) {
         val adminToken = stringPreferencesKey("admin_token")
         val pins = stringPreferencesKey("pins")
         val player = stringPreferencesKey("player")
+        val weatherPlace = stringPreferencesKey("weather_place")
+        val weatherLatitude = stringPreferencesKey("weather_latitude")
+        val weatherLongitude = stringPreferencesKey("weather_longitude")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -83,6 +91,12 @@ class LauncherSettings(private val context: Context) {
 
     suspend fun setPlayer(player: Player) = context.dataStore.edit { it[Keys.player] = player.name }
 
+    suspend fun setWeatherPlace(name: String, latitude: Double, longitude: Double) = context.dataStore.edit {
+        it[Keys.weatherPlace] = name.trim()
+        it[Keys.weatherLatitude] = latitude.toString()
+        it[Keys.weatherLongitude] = longitude.toString()
+    }
+
     private fun Preferences.toSettings() = Settings(
         googleClientId = this[Keys.googleClientId].orEmpty(),
         googleClientSecret = this[Keys.googleClientSecret].orEmpty(),
@@ -93,5 +107,8 @@ class LauncherSettings(private val context: Context) {
         adminToken = this[Keys.adminToken].orEmpty(),
         pinsJson = this[Keys.pins] ?: "[]",
         player = this[Keys.player]?.let { name -> Player.entries.firstOrNull { it.name == name } } ?: Player.WHOLPHIN,
+        weatherPlace = this[Keys.weatherPlace].orEmpty(),
+        weatherLatitude = this[Keys.weatherLatitude]?.toDoubleOrNull(),
+        weatherLongitude = this[Keys.weatherLongitude]?.toDoubleOrNull(),
     )
 }

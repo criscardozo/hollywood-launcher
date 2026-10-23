@@ -8,6 +8,7 @@ import dev.cardozo.hollywood.launcher.details.Action
 import dev.cardozo.hollywood.launcher.details.Details
 import dev.cardozo.hollywood.launcher.details.Person
 import dev.cardozo.hollywood.launcher.details.Season
+import dev.cardozo.hollywood.launcher.details.trailerAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -270,11 +271,11 @@ private fun ApiClient.movieDetails(item: BaseItemDto, server: String?): Details 
     val actions = if (media.positionMs > 0) {
         listOf(
             Action("Continuar", formatMinutes(media.positionMs / 60_000), media),
-            Action("Desde el principio", item = media.copy(positionMs = 0)),
+            Action("Desde el principio", item = media.copy(positionMs = 0), icon = "↺"),
         )
     } else {
         listOf(Action("Reproducir", item = media))
-    }
+    } + listOfNotNull(trailer(item))
     return Details(
         source = Source.JELLYFIN,
         sourceName = server,
@@ -290,6 +291,8 @@ private fun ApiClient.movieDetails(item: BaseItemDto, server: String?): Details 
         remaining = media.remaining,
         actions = actions,
         cast = cast(item),
+        tmdbId = item.providerIds?.get("Tmdb")?.toIntOrNull(),
+        tmdbType = "movie",
     )
 }
 
@@ -312,10 +315,10 @@ private suspend fun ApiClient.seriesDetails(userId: UUID, series: BaseItemDto, o
         nextItem == null -> emptyList()
         started -> listOf(
             Action("Continuar", label, nextItem),
-            Action("Desde el principio", label, nextItem.copy(positionMs = 0)),
+            Action("Desde el principio", label, nextItem.copy(positionMs = 0), icon = "↺"),
         )
         else -> listOf(Action("Reproducir", label, nextItem))
-    }
+    } + listOfNotNull(trailer(series))
     return Details(
         source = Source.JELLYFIN,
         sourceName = server,
@@ -337,8 +340,15 @@ private suspend fun ApiClient.seriesDetails(userId: UUID, series: BaseItemDto, o
         seasons = seasons,
         seasonId = (next?.seasonId?.toString() ?: seasons.firstOrNull()?.id),
         seriesId = series.id.toString(),
+        tmdbId = series.providerIds?.get("Tmdb")?.toIntOrNull(),
+        tmdbType = "tv",
     )
 }
+
+/** The first YouTube trailer Jellyfin's metadata lists for the title (about two thirds of the library). */
+private fun trailer(item: BaseItemDto): Action? =
+    item.remoteTrailers.orEmpty().mapNotNull { it.url }.firstOrNull { "youtube.com" in it || "youtu.be" in it }
+        ?.let(::trailerAction)
 
 private fun ApiClient.cast(item: BaseItemDto): List<Person> =
     item.people.orEmpty().filter { it.type == PersonKind.ACTOR }.take(12).map { person ->

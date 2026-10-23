@@ -4,6 +4,7 @@ import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.details.Action
 import dev.cardozo.hollywood.launcher.details.Details
 import dev.cardozo.hollywood.launcher.details.Person
+import dev.cardozo.hollywood.launcher.details.trailerAction
 import dev.cardozo.hollywood.launcher.net.Http
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.serialization.SerialName
@@ -51,6 +52,7 @@ private data class CountryRelease(
 @Serializable private data class Releases(val results: List<CountryRelease> = emptyList())
 @Serializable private data class CountryRating(@SerialName("iso_3166_1") val country: String, val rating: String = "")
 @Serializable private data class ContentRatings(val results: List<CountryRating> = emptyList())
+@Serializable private data class Video(val type: String? = null, val site: String? = null, val url: String? = null)
 
 /** The fields of Seerr's /movie and /tv responses the details page uses. */
 @Serializable
@@ -62,7 +64,11 @@ private data class TitleDetails(
     val credits: Credits = Credits(),
     val releases: Releases = Releases(),
     val contentRatings: ContentRatings = ContentRatings(),
-)
+    val relatedVideos: List<Video> = emptyList(),
+) {
+    /** TMDB's first YouTube trailer. */
+    val trailer get() = relatedVideos.firstOrNull { it.type == "Trailer" && it.site == "YouTube" && it.url != null }?.url
+}
 
 /**
  * TMDB through Cristian's Seerr (Ginebra, port 5055): search, and which subscription services carry a
@@ -115,9 +121,15 @@ class SeerrClient(private val settings: LauncherSettings) {
             genres = d.genres.map { it.name },
             overview = pin.overview,
             backdropUrl = item.backdropUrl,
-            actions = listOf(Action("Abrir en ${pin.source.label}", item = item)),
+            actions = listOfNotNull(Action("Abrir en ${pin.source.label}", item = item), d.trailer?.let(::trailerAction)),
             cast = d.credits.cast.take(12).map { Person(it.name, it.character?.takeIf { c -> c.isNotBlank() }, it.profilePath?.let { p -> "$TMDB_PROFILES$p" }) },
         )
+    }
+
+    /** A trailer from TMDB, for a Jellyfin title whose own metadata has none. */
+    suspend fun trailer(tmdbId: Int, mediaType: String): String? {
+        val url = endpoint("$mediaType/$tmdbId").newBuilder().addQueryParameter("language", LANGUAGE).build()
+        return Http.json.decodeFromString<TitleDetails>(get(url.toString())).trailer
     }
 
     private suspend fun endpoint(path: String) =

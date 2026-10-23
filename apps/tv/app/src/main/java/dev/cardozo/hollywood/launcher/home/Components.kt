@@ -13,6 +13,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,8 +31,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -49,9 +48,8 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import dev.cardozo.hollywood.launcher.apps.TvApp
 import dev.cardozo.hollywood.launcher.content.MediaItem
-import dev.cardozo.hollywood.launcher.system.openInputs
-import dev.cardozo.hollywood.launcher.system.openSettings
 import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.weather.Weather
 import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -210,31 +208,37 @@ fun ActionCard(
     }
 }
 
+/** Top right: the weather (once a place is set on the settings page) and the time. Nothing to focus. */
 @Composable
-fun TopBar(down: FocusRequester, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-        // The bar floats over the top right with nothing beneath it, so Down has no geometric target.
-        Pill("Entradas", down) { context.openInputs() }
-        Pill("Ajustes", down) { context.openSettings() }
-        Clock()
+fun TopBar(weather: Weather?, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (weather != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(weather.symbol, fontSize = 17.sp)
+                Spacer(Modifier.width(5.dp))
+                Text("${weather.temperature}°", fontSize = 19.sp, fontWeight = FontWeight.Medium, color = Foreground)
+            }
+        }
+        Clock(fontSize = 24)
     }
 }
 
+/** A tile in the last row of Home, for the TV's own screens (inputs, settings). */
 @Composable
-private fun Pill(label: String, down: FocusRequester, onClick: () -> Unit) {
-    Surface(
+fun SystemTile(label: String, symbol: String, onClick: () -> Unit) {
+    Card(
         onClick = onClick,
-        modifier = Modifier.focusProperties { this.down = down },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.12f),
-            contentColor = Dim,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color(0xFF111111),
-        ),
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.08f),
+        border = cardBorder(),
+        colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
+        modifier = Modifier.size(150.dp, 61.dp),
     ) {
-        Text(label, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Text(symbol, fontSize = 15.sp, color = Foreground)
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 12.sp, color = Foreground)
+        }
     }
 }
 

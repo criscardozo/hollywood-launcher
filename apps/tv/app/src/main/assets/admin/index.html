@@ -36,6 +36,8 @@
   .hidden { display: none; }
   .code { font: 700 34px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 4px; margin: 6px 0; user-select: all; }
   a { color: var(--accent); }
+  .saved { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.25); }
+  .saved span { flex: 1; } .saved button { margin-top: 0; }
   code { background: #0f1116; padding: 1px 6px; border-radius: 5px; }
 </style>
 </head>
@@ -60,19 +62,23 @@
     <section>
       <h2>Jellyfin</h2>
       <p>Tu usuario de Jellyfin. La contraseña no se guarda: el launcher se queda solo con el acceso que le da el servidor.</p>
+      <div class="saved hidden" id="jfSaved"><span>✓ Conectado a <b id="jfSavedText"></b></span><button class="ghost" onclick="unlock('jf')">Conectar de nuevo</button></div>
+      <div id="jfForm">
       <label>Servidor</label><input id="jfUrl" placeholder="buscando en la red…">
       <div class="row">
         <div><label>Usuario</label><input id="jfUser" autocomplete="username"></div>
         <div><label>Contraseña</label><input id="jfPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')connectJellyfin()"></div>
       </div>
       <button onclick="connectJellyfin()">Conectar</button>
+      </div>
       <div class="msg" id="jfMsg"></div>
     </section>
 
     <section>
       <h2>YouTube</h2>
       <p>Con tu cuenta de Google: el launcher pide un código, lo abrís en google.com/device y aceptás. Solo lee tus suscripciones.</p>
-      <button onclick="connectYouTube()">Conectar YouTube</button>
+      <div class="saved hidden" id="ytSaved"><span>✓ Conectado con tu cuenta de Google</span><button class="ghost" onclick="unlock('yt')">Conectar de nuevo</button></div>
+      <div id="ytForm"><button onclick="connectYouTube()">Conectar YouTube</button></div>
       <div id="ytCode" class="hidden">
         <p style="margin:14px 0 0">Abrí <a id="ytLink" target="_blank" rel="noopener"></a> y escribí:</p>
         <div class="code" id="ytCodeText"></div>
@@ -82,19 +88,36 @@
       <details style="margin-top:14px">
         <summary>Cliente de Google</summary>
         <p>Cliente OAuth de Google Cloud del tipo <b>TVs and Limited Input devices</b>, con la YouTube Data API v3 habilitada. Hace falta una sola vez, antes de conectar.</p>
+        <div class="saved hidden" id="googleSaved"><span>✓ Cliente cargado</span><button class="ghost" onclick="unlock('google')">Cambiar</button></div>
+        <div id="googleForm">
         <label>Client ID</label><input id="clientId" placeholder="…apps.googleusercontent.com">
         <label>Client secret</label><input id="clientSecret" type="password">
         <button onclick="saveGoogle()">Guardar</button>
+        </div>
         <div class="msg" id="googleMsg"></div>
       </details>
     </section>
 
     <section>
+      <h2>Clima</h2>
+      <p>La temperatura y el ícono arriba a la derecha de la tele salen de Open-Meteo (gratis, sin cuenta). Buscá tu ciudad y elegila.</p>
+      <div class="saved hidden" id="weatherSaved"><span>✓ Ciudad: <b id="weatherSavedText"></b></span><button class="ghost" onclick="unlock('weather')">Cambiar</button></div>
+      <div id="weatherForm">
+      <div class="row"><div><label>Ciudad</label><input id="weatherQ" placeholder="Sídney, Bondi, Parramatta…" onkeydown="if(event.key==='Enter')searchWeather()"></div><div style="flex:0"><button onclick="searchWeather()">Buscar</button></div></div>
+      <div id="weatherResults" style="margin-top:10px"></div>
+      </div>
+      <div class="msg" id="weatherMsg"></div>
+    </section>
+
+    <section>
       <h2>Seerr</h2>
       <p>Para buscar series y películas (TMDB). La API key está en Seerr → Settings → General.</p>
+      <div class="saved hidden" id="seerrSaved"><span>✓ Configurado en <b id="seerrSavedText"></b></span><button class="ghost" onclick="unlock('seerr')">Cambiar</button></div>
+      <div id="seerrForm">
       <label>Dirección</label><input id="seerrUrl" value="http://192.168.0.2:5055">
       <label>API key</label><input id="seerrKey" type="password">
       <button onclick="saveSeerr()">Guardar y probar</button>
+      </div>
       <div class="msg" id="seerrMsg"></div>
     </section>
 
@@ -162,7 +185,13 @@ async function load() {
     pill("Jellyfin", s.jellyfinConnected, s.jellyfinConnected ? "conectado" : "sin conectar") +
     pill("YouTube", s.youtubeConnected, s.youtubeConnected ? "conectado" : s.youtubeConfigured ? "sin conectar" : "falta el cliente de Google") +
     pill("Seerr", s.seerrConfigured, s.seerrConfigured ? "configurado" : "falta la API key") +
-    pill("Fijados", s.pins > 0, String(s.pins));
+    pill("Fijados", s.pins > 0, String(s.pins)) +
+    pill("Clima", !!s.weatherPlace, s.weatherPlace || "sin ciudad");
+  lock("jf", s.jellyfinConnected, s.jellyfinUrl);
+  lock("yt", s.youtubeConnected);
+  lock("google", s.youtubeConfigured);
+  lock("weather", !!s.weatherPlace, s.weatherPlace);
+  lock("seerr", s.seerrConfigured, s.seerrUrl);
   if (s.seerrUrl) $("seerrUrl").value = s.seerrUrl;
   if (!s.youtubeConfigured) document.querySelector("details").open = true;
   if (!$("jfUrl").value) findJellyfin();
@@ -182,7 +211,7 @@ async function connectJellyfin() {
   msg("jfMsg", "Conectando…");
   try {
     await api("/api/jellyfin", { method: "POST", body: JSON.stringify({ url: $("jfUrl").value, username: $("jfUser").value, password: $("jfPass").value }) });
-    $("jfPass").value = ""; msg("jfMsg", "Conectado. La tele ya muestra tu Jellyfin."); load();
+    $("jfPass").value = ""; relock("jf"); msg("jfMsg", "Conectado. La tele ya muestra tu Jellyfin."); load();
   } catch (e) { msg("jfMsg", e.message, false); }
 }
 
@@ -200,7 +229,7 @@ function showYouTube(c) {
   if (c.state === "waiting") {
     $("ytLink").href = c.url; $("ytLink").textContent = c.url.replace(/^https?:\/\/(www\.)?/, "");
     $("ytCodeText").textContent = c.code; msg("ytMsg", "Esperando que aceptes…");
-  } else if (c.state === "connected") { msg("ytMsg", "Conectado. La fila de YouTube aparece en la tele en unos segundos."); load(); }
+  } else if (c.state === "connected") { relock("yt"); msg("ytMsg", "Conectado. La fila de YouTube aparece en la tele en unos segundos."); load(); }
   else if (c.state === "failed") msg("ytMsg", c.error || "No funcionó", false);
   if (c.state !== "waiting") { clearInterval(ytPoll); ytPoll = null; }
 }
@@ -215,11 +244,44 @@ async function connectYouTube() {
 }
 
 async function saveGoogle() {
-  try { await api("/api/google", { method: "POST", body: JSON.stringify({ clientId: $("clientId").value, clientSecret: $("clientSecret").value }) }); msg("googleMsg", "Guardado. Ya podés conectar YouTube."); load(); }
+  try { await api("/api/google", { method: "POST", body: JSON.stringify({ clientId: $("clientId").value, clientSecret: $("clientSecret").value }) }); relock("google"); msg("googleMsg", "Guardado. Ya podés conectar YouTube."); load(); }
   catch (e) { msg("googleMsg", e.message, false); }
 }
+// What is already saved shows as such, with its fields hidden until «Cambiar» / «Conectar de nuevo»:
+// an empty form next to a working setting reads as if nothing were configured.
+const unlocked = {};
+function lock(name, saved, text) {
+  const show = saved && !unlocked[name];
+  $(name + "Saved").classList.toggle("hidden", !show);
+  $(name + "Form").classList.toggle("hidden", show);
+  if (text !== undefined && $(name + "SavedText")) $(name + "SavedText").textContent = text;
+}
+function unlock(name) {
+  unlocked[name] = true;
+  $(name + "Saved").classList.add("hidden");
+  $(name + "Form").classList.remove("hidden");
+}
+function relock(name) { delete unlocked[name]; }
+
+let places = [];
+async function searchWeather() {
+  try {
+    places = await api("/api/weather/search?q=" + encodeURIComponent($("weatherQ").value));
+    $("weatherResults").innerHTML = places.map((p, i) =>
+      `<button class="ghost" onclick="pickPlace(${i})">${esc(p.name)}${p.admin1 ? ", " + esc(p.admin1) : ""}${p.country ? " · " + esc(p.country) : ""}</button>`).join(" ");
+    msg("weatherMsg", places.length ? "Elegí una." : "No se encontró.", places.length > 0);
+  } catch (e) { msg("weatherMsg", e.message, false); }
+}
+async function pickPlace(i) {
+  const p = places[i];
+  try {
+    await api("/api/weather", { method: "POST", body: JSON.stringify({ name: p.name, latitude: p.latitude, longitude: p.longitude }) });
+    $("weatherResults").innerHTML = ""; relock("weather"); msg("weatherMsg", "Guardado. La tele lo muestra en unos segundos."); load();
+  } catch (e) { msg("weatherMsg", e.message, false); }
+}
+
 async function saveSeerr() {
-  try { await api("/api/seerr", { method: "POST", body: JSON.stringify({ url: $("seerrUrl").value, apiKey: $("seerrKey").value }) }); msg("seerrMsg", "Funciona."); load(); }
+  try { await api("/api/seerr", { method: "POST", body: JSON.stringify({ url: $("seerrUrl").value, apiKey: $("seerrKey").value }) }); relock("seerr"); msg("seerrMsg", "Funciona."); load(); }
   catch (e) { msg("seerrMsg", "No funcionó: " + e.message, false); }
 }
 async function savePlayer() {

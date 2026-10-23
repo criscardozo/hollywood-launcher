@@ -152,7 +152,6 @@ fun DetailsScreen(item: MediaItem, player: Player, onPlay: (MediaItem) -> Unit) 
                         details.actions.forEachIndexed { index, action ->
                             ActionButton(
                                 action,
-                                primary = index == 0,
                                 modifier = if (index == 0) Modifier.focusRequester(firstButton) else Modifier,
                             ) { onPlay(action.item) }
                         }
@@ -167,9 +166,17 @@ fun DetailsScreen(item: MediaItem, player: Player, onPlay: (MediaItem) -> Unit) 
 }
 
 private suspend fun load(app: LauncherApplication, item: MediaItem): Details? = when (item.source) {
-    Source.JELLYFIN -> app.jellyfin.details(item.id)
+    Source.JELLYFIN -> app.jellyfin.details(item.id)?.let { withSeerrTrailer(app, it) }
     in Source.pinnable -> app.pins.list().firstOrNull { it.id == item.id }?.let { app.seerr.details(it) }
     else -> null
+}
+
+/** About a third of the library has no trailer in Jellyfin's metadata; TMDB (through Seerr) usually does. */
+private suspend fun withSeerrTrailer(app: LauncherApplication, details: Details): Details {
+    if (details.hasTrailer || details.tmdbId == null || details.tmdbType == null) return details
+    if (!app.settings.current().seerrConfigured) return details
+    val url = runCatching { app.seerr.trailer(details.tmdbId, details.tmdbType) }.getOrNull() ?: return details
+    return details.copy(actions = details.actions + trailerAction(url))
 }
 
 @Composable
@@ -193,7 +200,7 @@ private fun Facts(details: Details, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ActionButton(action: Action, primary: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ActionButton(action: Action, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = modifier,
@@ -207,7 +214,7 @@ private fun ActionButton(action: Action, primary: Boolean, modifier: Modifier = 
         ),
     ) {
         Row(Modifier.padding(horizontal = 15.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (primary) "▶  " else "↺  ", fontSize = 11.sp)
+            Text("${action.icon}  ", fontSize = 11.sp)
             Text(action.label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             action.note?.let { Text("  $it", fontSize = 10.sp, modifier = Modifier.padding(top = 1.dp)) }
         }

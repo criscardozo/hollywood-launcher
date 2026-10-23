@@ -8,7 +8,17 @@ data class Person(val name: String, val role: String?, val imageUrl: String?)
 data class Season(val id: String, val name: String)
 
 /** A button on the details page and what it plays. */
-data class Action(val label: String, val note: String? = null, val item: MediaItem)
+data class Action(val label: String, val note: String? = null, val item: MediaItem, val icon: String = "▶")
+
+/** The trailer button: a YouTube URL handed to the YouTube app, which plays it straight away. */
+fun trailerAction(url: String) = Action(
+    label = "Tráiler",
+    icon = "🎬",
+    item = MediaItem(
+        id = "trailer:$url", source = Source.YOUTUBE, title = "Tráiler", subtitle = null, meta = "",
+        overview = null, cardImageUrl = null, posterUrl = null, backdropUrl = null, link = url,
+    ),
+)
 
 /**
  * Everything the details page shows for a film or a series, from Jellyfin or (for pinned titles) from
@@ -39,7 +49,12 @@ data class Details(
     /** The season to open on: the one the next episode is in. */
     val seasonId: String? = null,
     val seriesId: String? = null,
+    /** TMDB's id and kind («movie» or «tv»), to find a trailer through Seerr when the source has none. */
+    val tmdbId: Int? = null,
+    val tmdbType: String? = null,
 ) {
+    val hasTrailer get() = actions.any { it.label == "Tráiler" }
+
     val isSeries get() = seasons.isNotEmpty()
 
     companion object {

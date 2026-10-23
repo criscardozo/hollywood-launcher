@@ -12,6 +12,7 @@ import dev.cardozo.hollywood.launcher.pins.PinsRepository
 import dev.cardozo.hollywood.launcher.pins.SeerrClient
 import dev.cardozo.hollywood.launcher.remote.RemoteKeys
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.weather.WeatherRepository
 import dev.cardozo.hollywood.launcher.youtube.YouTubeAuth
 import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
 import dev.cardozo.hollywood.launcher.youtube.YouTubeSignIn
@@ -39,6 +40,7 @@ private const val LOCKOUT_MS = 5 * 60_000L
 
 @Serializable private data class GoogleBody(val clientId: String, val clientSecret: String)
 @Serializable private data class SeerrBody(val url: String, val apiKey: String)
+@Serializable private data class WeatherBody(val name: String, val latitude: Double, val longitude: Double)
 @Serializable private data class JellyfinBody(val url: String, val username: String, val password: String)
 /** Google's sign-in as the page sees it: [state] is idle, waiting, connected or failed. */
 @Serializable private data class YouTubeConnect(val state: String, val url: String? = null, val code: String? = null, val error: String? = null)
@@ -53,8 +55,10 @@ private data class Status(
     val seerrConfigured: Boolean,
     val seerrUrl: String,
     val jellyfinConnected: Boolean,
+    val jellyfinUrl: String,
     val player: String,
     val pins: Int,
+    val weatherPlace: String,
 )
 @Serializable private data class Error(val error: String)
 
@@ -72,6 +76,7 @@ class AdminServer(
     private val remoteKeys: RemoteKeys,
     private val youtube: YouTubeRepository,
     private val youtubeAuth: YouTubeAuth,
+    private val weather: WeatherRepository,
 ) : NanoHTTPD(ADMIN_PORT) {
 
     private val json: Json = Http.json
@@ -152,6 +157,17 @@ class AdminServer(
                 uri == "/api/youtube/connect" && method == Method.POST -> reply(startYouTubeSignIn())
 
                 uri == "/api/youtube/connect" && method == Method.GET -> reply(youtubeConnect)
+
+                uri == "/api/weather/search" && method == Method.GET -> {
+                    val query = session.parms["q"].orEmpty()
+                    reply(if (query.isBlank()) emptyList() else weather.search(query))
+                }
+
+                uri == "/api/weather" && method == Method.POST -> {
+                    val body = json.decodeFromString<WeatherBody>(body(session))
+                    settings.setWeatherPlace(body.name, body.latitude, body.longitude)
+                    reply(status())
+                }
 
                 uri == "/api/player" && method == Method.POST -> {
                     val body = json.decodeFromString<PlayerBody>(body(session))
@@ -253,15 +269,27 @@ class AdminServer(
             seerrConfigured = s.seerrConfigured,
             seerrUrl = s.seerrUrl,
             jellyfinConnected = jellyfin.session.first() != null,
+            jellyfinUrl = jellyfin.session.first()?.baseUrl.orEmpty(),
             player = s.player.name,
             pins = pins.list().size,
+            weatherPlace = s.weatherPlace,
         )
     }
 
+    /**
+     * The request body as UTF-8. NanoHTTPD's parseBody decodes it as ISO-8859-1 unless the Content-Type
+     * names a charset, which fetch() and curl do not, so «Sídney» arrived as «SÃ­dney».
+     */
     private fun body(session: IHTTPSession): String {
-        val files = HashMap<String, String>()
-        session.parseBody(files)
-        return files["postData"].orEmpty()
+        val length = session.headers["content-length"]?.toIntOrNull() ?: return ""
+        val bytes = ByteArray(length)
+        var read = 0
+        while (read < length) {
+            val n = session.inputStream.read(bytes, read, length - read)
+            if (n < 0) break
+            read += n
+        }
+        return String(bytes, 0, read, Charsets.UTF_8)
     }
 
     private inline fun <reified T> reply(value: T, status: Response.Status = Response.Status.OK): Response =

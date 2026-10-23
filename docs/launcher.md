@@ -44,8 +44,11 @@ las filas del B debajo.
 | Prime Video, Disney+, Max | Fijados de ese servicio | Cargados desde la página de configuración; datos de TMDB vía Seerr | Abre el detalle |
 | Las demás | — (se ve el wallpaper) | | |
 
-**Arriba a la derecha:** Entradas (selector de HDMI de TCL, `com.android.tv.action.VIEW_INPUTS`),
-Ajustes (los de la tele) y la hora.
+**Arriba a la derecha:** el clima (temperatura e ícono, de Open-Meteo, para la ciudad elegida en la
+página de configuración; se actualiza cada media hora mientras Home está en pantalla) y la hora.
+
+**Última fila, «Tele»:** Entradas (selector de HDMI de TCL, `com.android.tv.action.VIEW_INPUTS`) y
+Ajustes (los de la tele).
 
 **Fondo:** la imagen de lo enfocado; si no, fondos al azar de la biblioteca de Jellyfin, que cambian
 cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la tarjeta.
@@ -59,7 +62,9 @@ tecla vuelve todo a su lugar.
 OK en una película o serie (Jellyfin o fijados) abre su página, como la de Jellyfin (diseño A de
 `docs/mockups/detalle.html`): fondo, año, duración, clasificación, puntaje, a qué hora termina,
 géneros, sinopsis, **Continuar** / **Desde el principio** (o **Reproducir**), y abajo el reparto o las
-temporadas con sus episodios. Un episodio abre su serie, siguiendo desde ese episodio.
+temporadas con sus episodios. Un episodio abre su serie, siguiendo desde ese episodio. **Tráiler** abre
+en la app de YouTube el tráiler que lista Jellyfin; si no tiene (un tercio de la biblioteca), el de TMDB
+vía Seerr.
 
 **Se reproduce en:** el «G▶» y el nombre del servidor (Ginebra) para Jellyfin, o el ícono de la app
 instalada para Prime Video, Disney+ y Max. Los datos de los fijados salen de TMDB vía Seerr, con la
@@ -91,6 +96,10 @@ Desde la página:
 - **Fijados:** buscar, elegir servicio (sugiere el que lo tiene en Australia) y pegar el link opcional.
 - **Botones del control:** ver qué código manda un botón y asignarle una app.
 - **Reproductor de Jellyfin:** Wholphin u oficial.
+- **Clima:** buscar la ciudad y elegirla.
+
+Lo que ya está configurado se muestra como «✓ Conectado / Configurado» con un botón **Cambiar** o
+**Conectar de nuevo**; los campos aparecen recién al tocarlo.
 
 La misma API (`/api/…`, con el código en el header `X-Token`) es la que va a usar la app del iPhone.
 

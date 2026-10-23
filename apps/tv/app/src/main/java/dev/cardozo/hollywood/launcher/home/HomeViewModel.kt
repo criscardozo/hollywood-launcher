@@ -11,6 +11,7 @@ import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.jellyfin.JellyfinHome
 import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.weather.Weather
 import dev.cardozo.hollywood.launcher.pins.toMediaItem
 import dev.cardozo.hollywood.launcher.settings.Settings
 import kotlinx.coroutines.delay
@@ -52,6 +53,7 @@ sealed interface Shelf {
 private const val TAG = "HomeViewModel"
 private const val WALLPAPER_EVERY_MS = 3 * 60_000L
 const val SHELF_SIZE = 15
+const val WEATHER_EVERY_MS = 30 * 60_000L
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -77,12 +79,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _wallpaper = MutableStateFlow<String?>(null)
     val wallpaper: StateFlow<String?> = _wallpaper.asStateFlow()
 
+    private val _weather = MutableStateFlow<Weather?>(null)
+    val weather: StateFlow<Weather?> = _weather.asStateFlow()
+    private var weatherAt = 0L
+
     init {
         viewModelScope.launch {
             app.jellyfin.session.map { it != null }.distinctUntilChanged().collect { refreshJellyfin() }
         }
         viewModelScope.launch {
             settings.map { it.youtubeConfigured to it.youtubeConnected }.distinctUntilChanged().collect { refreshYouTube() }
+        }
+        viewModelScope.launch {
+            settings.map { it.weatherLatitude to it.weatherLongitude }.distinctUntilChanged().collect { refreshWeather(force = true) }
         }
         viewModelScope.launch {
             var i = 0
@@ -98,6 +107,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun refresh() {
         refreshJellyfin()
         refreshYouTube()
+        refreshWeather()
+    }
+
+    /** At most every half hour unless the place changed; Home calls it while it is on screen. */
+    fun refreshWeather(force: Boolean = false) {
+        if (!force && System.currentTimeMillis() - weatherAt < WEATHER_EVERY_MS) return
+        weatherAt = System.currentTimeMillis()
+        viewModelScope.launch {
+            _weather.value = try {
+                app.weather.current()
+            } catch (e: Exception) {
+                Log.w(TAG, "Weather failed", e)
+                weatherAt = 0L // try again next time instead of keeping a stale reading for half an hour
+                _weather.value
+            }
+        }
     }
 
     private fun refreshJellyfin() {

@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -67,6 +69,8 @@ import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.content.open
 import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.system.launch
+import dev.cardozo.hollywood.launcher.system.openInputs
+import dev.cardozo.hollywood.launcher.system.openSettings
 import dev.cardozo.hollywood.launcher.ui.Background
 import dev.cardozo.hollywood.launcher.ui.Dim
 import dev.cardozo.hollywood.launcher.ui.Faint
@@ -110,6 +114,7 @@ fun HomeScreen(
     val youtube by viewModel.youtube.collectAsState()
     val pinned by viewModel.pinned.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val weather by viewModel.weather.collectAsState()
 
     // The shelf follows the app last focused in the dock; the hero follows whatever is focused.
     var shelfApp by remember { mutableStateOf<String?>(null) }
@@ -126,6 +131,13 @@ fun HomeScreen(
     var showing by remember { mutableStateOf<MediaItem?>(null) }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val onScreen = active && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    // The weather refreshes itself (at most every half hour) only while Home is on screen.
+    LaunchedEffect(onScreen) {
+        while (onScreen) {
+            viewModel.refreshWeather()
+            delay(WEATHER_EVERY_MS)
+        }
+    }
     LaunchedEffect(keyPresses, row, focusedItem, onScreen) {
         showing = null
         if (!onScreen || row.size < 2) return@LaunchedEffect
@@ -148,6 +160,7 @@ fun HomeScreen(
     val dockFocus = remember { FocusRequester() }
     // Back from details: the restorer puts focus on the card that opened it.
     val pageFocus = remember { FocusRequester() }
+    val tvRow = remember { BringIntoViewRequester() }
     var wasActive by remember { mutableStateOf(active) }
     LaunchedEffect(active) {
         if (active && !wasActive) runCatching { pageFocus.requestFocus() }
@@ -268,11 +281,25 @@ fun HomeScreen(
                     Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
                     MediaRow(pinned, showing, onFocusItem = { focusedItem = it; focusedRow = pinned }, onPlay = play)
                 }
-                Spacer(Modifier.height(48.dp))
+                // The TV's own screens, last: they used to float in the top bar, where focus could get stuck.
+                Spacer(Modifier.height(28.dp))
+                Box(Modifier.padding(start = Edge)) { RowTitle("Tele") }
+                Row(
+                    Modifier
+                        // Focus would only bring the tile itself into view, flush with the bottom of the screen.
+                        .bringIntoViewRequester(tvRow)
+                        .onFocusChanged { if (it.hasFocus) scope.launch { tvRow.bringIntoView() } }
+                        .padding(start = Edge, top = 8.dp, bottom = 28.dp),
+                    horizontalArrangement = Arrangement.spacedBy(13.dp),
+                ) {
+                    SystemTile("Entradas", "⇄") { context.openInputs() }
+                    SystemTile("Ajustes", "⚙") { context.openSettings() }
+                }
+                Spacer(Modifier.height(20.dp))
             }
         }
 
-        TopBar(down = dockFocus, modifier = Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 36.dp))
+        TopBar(weather, Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 36.dp))
     }
 }
 

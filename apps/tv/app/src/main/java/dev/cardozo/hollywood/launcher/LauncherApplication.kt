@@ -14,6 +14,7 @@ import dev.cardozo.hollywood.launcher.pins.PinsRepository
 import dev.cardozo.hollywood.launcher.pins.SeerrClient
 import dev.cardozo.hollywood.launcher.remote.RemoteKeys
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.weather.WeatherRepository
 import dev.cardozo.hollywood.launcher.youtube.YouTubeAuth
 import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
 
@@ -26,8 +27,9 @@ class LauncherApplication : Application(), SingletonImageLoader.Factory {
     val youtube by lazy { YouTubeRepository(youtubeAuth, settings) }
     val pins by lazy { PinsRepository(settings) }
     val seerr by lazy { SeerrClient(settings) }
+    val weather by lazy { WeatherRepository(settings) }
     val remoteKeys by lazy { RemoteKeys(this) }
-    private val admin by lazy { AdminServer(this, settings, pins, seerr, jellyfin, remoteKeys, youtube, youtubeAuth) }
+    private val admin by lazy { AdminServer(this, settings, pins, seerr, jellyfin, remoteKeys, youtube, youtubeAuth, weather) }
 
     override fun onCreate() {
         super.onCreate()
