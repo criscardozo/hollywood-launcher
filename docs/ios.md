@@ -102,4 +102,5 @@ la casa y un campo para escribir en la tele. Sin ícono en el Dock.
   macOS pide permiso de **Red local**.
 - `make mac-build` / `make mac-run`. Menú «⋯» → **Abrir al iniciar sesión**. Para revisar el panel sin
   abrirlo: `HollywoodMenu -demo YES -snapshot /tmp/panel.png` lo dibuja en un PNG y sale.
-- Falta probarla contra la tele (emparejar muestra un código en pantalla).
+- Emparejada con la tele el 2026-10-23 y funcionando (lo probó Cristian): primera prueba real de Remote v2
+  contra la tele, incluido el puerto de comandos 6466 que el emulador no deja usar.
