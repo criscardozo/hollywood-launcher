@@ -2,6 +2,7 @@ package dev.cardozo.hollywood.launcher.home
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +46,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
+import coil3.SingletonImageLoader
+import coil3.compose.asPainter
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import dev.cardozo.hollywood.launcher.apps.TvApp
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
@@ -203,10 +207,24 @@ fun HomeScreen(
 
 @Composable
 private fun Backdrop(url: String?) {
-    Crossfade(targetState = url, animationSpec = tween(600), label = "backdrop") { current ->
+    val context = LocalContext.current
+    // The next backdrop is loaded before it replaces the current one, so the crossfade goes from image to
+    // image. Crossfading on the URL faded the old one out to black while the new one was still loading.
+    var shown by remember { mutableStateOf<coil3.Image?>(null) }
+    LaunchedEffect(url) {
+        if (url == null) {
+            shown = null
+            return@LaunchedEffect
+        }
+        // Moving quickly along a row cancels this, so only the backdrop where the focus stops is loaded.
+        delay(150)
+        val result = SingletonImageLoader.get(context).execute(ImageRequest.Builder(context).data(url).build())
+        if (result is SuccessResult) shown = result.image
+    }
+    Crossfade(targetState = shown, animationSpec = tween(600), label = "backdrop") { current ->
         if (current != null) {
-            AsyncImage(
-                model = current,
+            Image(
+                painter = remember(current) { current.asPainter(context) },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
