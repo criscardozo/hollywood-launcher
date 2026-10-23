@@ -3,7 +3,10 @@ package dev.cardozo.hollywood.launcher.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,10 +83,14 @@ private const val IDLE_BEFORE_ROTATING_MS = 10_000L
 /** How long the idle hero stays on each item. */
 const val HERO_ROTATE_MS = 8_000L
 
+/** The interface's own default: the smallest scroll that makes the focused item fully visible. */
+private val ScrollOnlyWhenHidden = object : BringIntoViewSpec {}
+
 /**
  * Layout D from docs/mockups/launcher-2.html: a hero with the focused item's info, the top shelf of
  * the app focused in the dock, the dock, and rows below it. Designed at 960×540 dp (the TV's 1080p).
  */
+@OptIn(ExperimentalFoundationApi::class) // LocalBringIntoViewSpec
 @Composable
 fun HomeScreen(
     onConnectJellyfin: () -> Unit,
@@ -183,68 +191,72 @@ fun HomeScreen(
             ),
         )
 
-        Column(
-            Modifier.fillMaxSize().verticalScroll(scroll),
-        ) {
-            Hero(heroItem, Modifier.height(244.dp).padding(start = Edge, top = 56.dp))
+        // On TV devices Compose scrolls every focus change to a fixed pivot. That made the rows slide on each
+        // key press and the page dip down before toTop() pulled it back: scroll only when something is hidden.
+        CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(scroll),
+            ) {
+                Hero(heroItem, Modifier.height(244.dp).padding(start = Edge, top = 56.dp))
 
-            ShelfRow(
-                shelf = shelf,
-                showing = showing,
-                onFocusItem = { focusedItem = it; focusedRow = shelfItems; toTop() },
-                onPlay = play,
-                onConnectJellyfin = onConnectJellyfin,
-                onConnectYouTube = onConnectYouTube,
-                onOpenSettings = onOpenSettings,
-            )
+                ShelfRow(
+                    shelf = shelf,
+                    showing = showing,
+                    onFocusItem = { focusedItem = it; focusedRow = shelfItems; toTop() },
+                    onPlay = play,
+                    onConnectJellyfin = onConnectJellyfin,
+                    onConnectYouTube = onConnectYouTube,
+                    onOpenSettings = onOpenSettings,
+                )
 
-            Spacer(Modifier.height(20.dp))
-            Dock(
-                apps = dock,
-                firstFocus = dockFocus,
-                onFocusApp = { app ->
-                    toTop()
-                    shelfApp = app.packageName
-                    focusedItem = null
-                },
-                onOpen = { context.launch(it) },
-                onAllApps = onAllApps,
-            )
+                Spacer(Modifier.height(20.dp))
+                Dock(
+                    apps = dock,
+                    firstFocus = dockFocus,
+                    onFocusApp = { app ->
+                        toTop()
+                        shelfApp = app.packageName
+                        focusedItem = null
+                    },
+                    onOpen = { context.launch(it) },
+                    onAllApps = onAllApps,
+                )
 
-            // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
-            if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
-                Spacer(Modifier.height(36.dp))
-                Box(Modifier.padding(start = Edge)) {
-                    ActionCard(
-                    title = "Conectar Jellyfin",
-                    subtitle = "Con un código de Quick Connect, sin escribir contraseñas",
-                    onClick = onConnectJellyfin,
-                    )
+                // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
+                if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
+                    Spacer(Modifier.height(36.dp))
+                    Box(Modifier.padding(start = Edge)) {
+                        ActionCard(
+                        title = "Conectar Jellyfin",
+                        subtitle = "Con un código de Quick Connect, sin escribir contraseñas",
+                        onClick = onConnectJellyfin,
+                        )
+                    }
                 }
-            }
-            val recent = (jellyfin as? JellyfinUi.Ready)?.home?.recentlyAdded.orEmpty()
-            if (recent.isNotEmpty()) {
-                Spacer(Modifier.height(36.dp))
-                Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
-                PosterRow(recent, showing, onFocusItem = { focusedItem = it; focusedRow = recent }, onPlay = play)
-            }
-            // The first videos live in YouTube's shelf; without the YouTube app in the dock they all go here.
-            val videos = (youtube as? YouTubeUi.Ready)?.videos.orEmpty()
-            val youtubeInDock = dock.any { it.packageName == Source.YOUTUBE.packageName }
-            val moreVideos = if (youtubeInDock) videos.drop(SHELF_SIZE) else videos
-            if (moreVideos.isNotEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                Box(Modifier.padding(start = Edge)) {
-                    RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
+                val recent = (jellyfin as? JellyfinUi.Ready)?.home?.recentlyAdded.orEmpty()
+                if (recent.isNotEmpty()) {
+                    Spacer(Modifier.height(36.dp))
+                    Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
+                    PosterRow(recent, showing, onFocusItem = { focusedItem = it; focusedRow = recent }, onPlay = play)
                 }
-                MediaRow(moreVideos, showing, onFocusItem = { focusedItem = it; focusedRow = moreVideos }, onPlay = play)
+                // The first videos live in YouTube's shelf; without the YouTube app in the dock they all go here.
+                val videos = (youtube as? YouTubeUi.Ready)?.videos.orEmpty()
+                val youtubeInDock = dock.any { it.packageName == Source.YOUTUBE.packageName }
+                val moreVideos = if (youtubeInDock) videos.drop(SHELF_SIZE) else videos
+                if (moreVideos.isNotEmpty()) {
+                    Spacer(Modifier.height(28.dp))
+                    Box(Modifier.padding(start = Edge)) {
+                        RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
+                    }
+                    MediaRow(moreVideos, showing, onFocusItem = { focusedItem = it; focusedRow = moreVideos }, onPlay = play)
+                }
+                if (pinned.isNotEmpty()) {
+                    Spacer(Modifier.height(28.dp))
+                    Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
+                    MediaRow(pinned, showing, onFocusItem = { focusedItem = it; focusedRow = pinned }, onPlay = play)
+                }
+                Spacer(Modifier.height(48.dp))
             }
-            if (pinned.isNotEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
-                MediaRow(pinned, showing, onFocusItem = { focusedItem = it; focusedRow = pinned }, onPlay = play)
-            }
-            Spacer(Modifier.height(48.dp))
         }
 
         TopBar(down = dockFocus, modifier = Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 36.dp))
