@@ -27,7 +27,7 @@ class LauncherApplication : Application(), SingletonImageLoader.Factory {
     val pins by lazy { PinsRepository(settings) }
     val seerr by lazy { SeerrClient(settings) }
     val remoteKeys by lazy { RemoteKeys(this) }
-    private val admin by lazy { AdminServer(this, settings, pins, seerr, jellyfin, remoteKeys, youtube) }
+    private val admin by lazy { AdminServer(this, settings, pins, seerr, jellyfin, remoteKeys, youtube, youtubeAuth) }
 
     override fun onCreate() {
         super.onCreate()

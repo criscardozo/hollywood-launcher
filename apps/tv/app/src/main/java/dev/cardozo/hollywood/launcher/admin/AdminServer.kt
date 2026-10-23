@@ -12,10 +12,19 @@ import dev.cardozo.hollywood.launcher.pins.PinsRepository
 import dev.cardozo.hollywood.launcher.pins.SeerrClient
 import dev.cardozo.hollywood.launcher.remote.RemoteKeys
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.youtube.YouTubeAuth
 import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
+import dev.cardozo.hollywood.launcher.youtube.YouTubeSignIn
 import fi.iki.elonen.NanoHTTPD
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -30,6 +39,9 @@ private const val LOCKOUT_MS = 5 * 60_000L
 
 @Serializable private data class GoogleBody(val clientId: String, val clientSecret: String)
 @Serializable private data class SeerrBody(val url: String, val apiKey: String)
+@Serializable private data class JellyfinBody(val url: String, val username: String, val password: String)
+/** Google's sign-in as the page sees it: [state] is idle, waiting, connected or failed. */
+@Serializable private data class YouTubeConnect(val state: String, val url: String? = null, val code: String? = null, val error: String? = null)
 @Serializable private data class PlayerBody(val player: String)
 @Serializable private data class YouTubeCheck(val videos: Int?, val sample: List<String>, val error: String?)
 @Serializable private data class KeyBody(val keyCode: Int, val packageName: String)
@@ -59,9 +71,15 @@ class AdminServer(
     private val jellyfin: JellyfinRepository,
     private val remoteKeys: RemoteKeys,
     private val youtube: YouTubeRepository,
+    private val youtubeAuth: YouTubeAuth,
 ) : NanoHTTPD(ADMIN_PORT) {
 
     private val json: Json = Http.json
+
+    // Google's device flow outlives the request that starts it: it polls until the code is approved.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var youtubeJob: Job? = null
+    @Volatile private var youtubeConnect = YouTubeConnect("idle")
 
     // Six digits are guessable only without a limit: 10 wrong codes lock the API for 5 minutes.
     private val failures = AtomicInteger(0)
@@ -123,6 +141,18 @@ class AdminServer(
                     reply(status())
                 }
 
+                uri == "/api/jellyfin/servers" && method == Method.GET -> reply(jellyfin.discoverOnce())
+
+                uri == "/api/jellyfin" && method == Method.POST -> {
+                    val body = json.decodeFromString<JellyfinBody>(body(session))
+                    val error = jellyfin.signIn(body.url, body.username, body.password)
+                    if (error != null) reply(Response.Status.BAD_REQUEST, Error(error)) else reply(status())
+                }
+
+                uri == "/api/youtube/connect" && method == Method.POST -> reply(startYouTubeSignIn())
+
+                uri == "/api/youtube/connect" && method == Method.GET -> reply(youtubeConnect)
+
                 uri == "/api/player" && method == Method.POST -> {
                     val body = json.decodeFromString<PlayerBody>(body(session))
                     settings.setPlayer(Player.valueOf(body.player))
@@ -183,6 +213,26 @@ class AdminServer(
                 else -> reply(Response.Status.NOT_FOUND, Error("No existe"))
             }
         }
+    }
+
+    /** Starts Google's sign-in (dropping one already waiting) and returns once the code is known. */
+    @Synchronized
+    private fun startYouTubeSignIn(): YouTubeConnect {
+        youtubeJob?.cancel()
+        youtubeConnect = YouTubeConnect("idle")
+        val first = CompletableDeferred<Unit>()
+        youtubeJob = scope.launch {
+            youtubeAuth.signIn().collect { step ->
+                youtubeConnect = when (step) {
+                    is YouTubeSignIn.WaitingForCode -> YouTubeConnect("waiting", url = step.url, code = step.code)
+                    YouTubeSignIn.Connected -> YouTubeConnect("connected")
+                    is YouTubeSignIn.Failed -> YouTubeConnect("failed", error = step.reason)
+                }
+                first.complete(Unit)
+            }
+        }
+        runBlocking { withTimeoutOrNull(15_000) { first.await() } }
+        return youtubeConnect.takeIf { first.isCompleted } ?: YouTubeConnect("failed", error = "Google no respondió")
     }
 
     /** Every app a TV home screen can open, by label. */

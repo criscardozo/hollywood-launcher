@@ -10,13 +10,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.authenticationApi
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.showApi
 import org.jellyfin.sdk.createJellyfin
 import org.jellyfin.sdk.model.ClientInfo
+import org.jellyfin.sdk.model.api.AuthenticateUserByName
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
@@ -27,6 +31,7 @@ import org.jellyfin.sdk.model.api.QuickConnectDto
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
+@Serializable
 data class DiscoveredServer(val name: String, val address: String)
 
 sealed interface QuickConnectState {
@@ -62,6 +67,35 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
             val address = info.address ?: return@collect
             emit(DiscoveredServer(info.name ?: address, address))
         }
+    }
+
+    /** Servers that answer the LAN broadcast within [timeoutMs], for the settings page to offer. */
+    suspend fun discoverOnce(timeoutMs: Long = 3_000): List<DiscoveredServer> {
+        val found = mutableListOf<DiscoveredServer>()
+        withTimeoutOrNull(timeoutMs) { discover().collect { found += it } }
+        return found.distinctBy { it.address }
+    }
+
+    /**
+     * Sign in with user and password, from the settings page (typing them with the remote is what Quick
+     * Connect avoids). Only the access token is kept. Returns null on success, else why it failed.
+     */
+    suspend fun signIn(baseUrl: String, username: String, password: String): String? = withContext(Dispatchers.IO) {
+        val url = baseUrl.trim().trimEnd('/')
+        val auth = try {
+            jellyfin.createApi(baseUrl = url).authenticationApi
+                .authenticateUserByName(AuthenticateUserByName(username = username.trim(), pw = password)).content
+        } catch (e: InvalidStatusException) {
+            return@withContext if (e.status == 401) "Usuario o contraseña incorrectos" else "El servidor respondió ${e.status}"
+        } catch (e: Exception) {
+            Log.w(TAG, "Sign-in on $url failed", e)
+            return@withContext "No se pudo hablar con $url"
+        }
+        val token = auth.accessToken
+        val userId = auth.user?.id ?: return@withContext "El servidor no devolvió un usuario"
+        if (token == null) return@withContext "El servidor no devolvió un usuario"
+        store.save(JellyfinSession(url, token, userId.toString()))
+        null
     }
 
     /**

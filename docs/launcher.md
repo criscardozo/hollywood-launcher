@@ -63,7 +63,9 @@ equivocados la API se bloquea 5 minutos). Ninguna clave queda en el código ni e
 
 Desde la página:
 
-- **YouTube:** client ID y secret de Google (ver abajo).
+- **Jellyfin:** servidor (lo busca en la red), usuario y contraseña. La contraseña no se guarda.
+- **YouTube:** botón **Conectar YouTube**, que muestra el código de google.com/device en la página; y
+  el client ID y secret de Google, una sola vez (ver abajo).
 - **Seerr:** dirección (`http://192.168.0.2:5055`) y API key, para buscar series y películas.
 - **Fijados:** buscar, elegir servicio (sugiere el que lo tiene en Australia) y pegar el link opcional.
 - **Botones del control:** ver qué código manda un botón y asignarle una app.
@@ -73,14 +75,19 @@ La misma API (`/api/…`, con el código en el header `X-Token`) es la que va a 
 
 ## Jellyfin sin escribir nada en la tele
 
-El launcher busca el servidor en la red (UDP 7359) o se escribe la dirección, muestra un código de
-**Quick Connect** y se aprueba desde Jellyfin (usuario → Quick Connect). Si el código vence, pide otro
-solo. Guarda el token; no hay contraseña en la tele.
+Lo más rápido es la página de configuración: usuario y contraseña desde el teléfono o la Mac. El
+launcher inicia sesión, guarda solo el token y descarta la contraseña.
+
+Desde la tele: el launcher busca el servidor en la red (UDP 7359) o se escribe la dirección, muestra un
+código de **Quick Connect** y se aprueba desde Jellyfin (usuario → Quick Connect). Si el código vence,
+pide otro solo.
 
 ## YouTube
 
-Login con la cuenta de Google por el flujo para TVs: la tele muestra un código, se escribe en
-google.com/device. Solo pide `youtube.readonly`. Hace falta un cliente OAuth propio:
+Login con la cuenta de Google por el flujo para TVs: el launcher pide un código, se escribe en
+google.com/device. El código aparece en la página de configuración (**Conectar YouTube**) o en la tele.
+Google no permite el login web común (con redirección) hacia una IP de la red local, por eso es con
+código. Solo pide `youtube.readonly`. Hace falta un cliente OAuth propio:
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → proyecto nuevo (sin facturación).
 2. APIs y servicios → Biblioteca → **YouTube Data API v3** → Habilitar.
@@ -88,7 +95,8 @@ google.com/device. Solo pide `youtube.readonly`. Hace falta un cliente OAuth pro
    (en "Testing" Google vence el login cada 7 días; publicada sin verificar muestra un aviso al
    aprobar, pero no vence).
 4. Clients → Create client → tipo **TVs and Limited Input devices** → copiar client ID y secret.
-5. Cargarlos en la página de configuración. En la tele: enfocar YouTube → **Conectar YouTube**.
+5. Cargarlos en la página de configuración y tocar **Conectar YouTube** (o en la tele: enfocar
+   YouTube → **Conectar YouTube**).
 
 Cuota: la lista de suscripciones cuesta 1 unidad cada 50 canales (se renueva cada 6 h); los videos
 salen del feed RSS público de cada canal (sin cuota); duraciones y vistas, 1 unidad cada 50 videos.

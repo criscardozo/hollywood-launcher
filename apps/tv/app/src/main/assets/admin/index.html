@@ -34,6 +34,8 @@
   .pin .t { flex: 1; } .pin small { color: var(--dim); display: block; }
   .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
   .hidden { display: none; }
+  .code { font: 700 34px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 4px; margin: 6px 0; user-select: all; }
+  a { color: var(--accent); }
   code { background: #0f1116; padding: 1px 6px; border-radius: 5px; }
 </style>
 </head>
@@ -56,12 +58,35 @@
     </section>
 
     <section>
+      <h2>Jellyfin</h2>
+      <p>Tu usuario de Jellyfin. La contraseña no se guarda: el launcher se queda solo con el acceso que le da el servidor.</p>
+      <label>Servidor</label><input id="jfUrl" placeholder="buscando en la red…">
+      <div class="row">
+        <div><label>Usuario</label><input id="jfUser" autocomplete="username"></div>
+        <div><label>Contraseña</label><input id="jfPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')connectJellyfin()"></div>
+      </div>
+      <button onclick="connectJellyfin()">Conectar</button>
+      <div class="msg" id="jfMsg"></div>
+    </section>
+
+    <section>
       <h2>YouTube</h2>
-      <p>Cliente OAuth de Google Cloud del tipo <b>TVs and Limited Input devices</b>, con la YouTube Data API v3 habilitada. Después, en la tele: enfocá YouTube → <b>Conectar YouTube</b>.</p>
-      <label>Client ID</label><input id="clientId" placeholder="…apps.googleusercontent.com">
-      <label>Client secret</label><input id="clientSecret" type="password">
-      <button onclick="saveGoogle()">Guardar</button>
-      <div class="msg" id="googleMsg"></div>
+      <p>Con tu cuenta de Google: el launcher pide un código, lo abrís en google.com/device y aceptás. Solo lee tus suscripciones.</p>
+      <button onclick="connectYouTube()">Conectar YouTube</button>
+      <div id="ytCode" class="hidden">
+        <p style="margin:14px 0 0">Abrí <a id="ytLink" target="_blank" rel="noopener"></a> y escribí:</p>
+        <div class="code" id="ytCodeText"></div>
+        <button class="ghost" onclick="copyCode()">Copiar código</button>
+      </div>
+      <div class="msg" id="ytMsg"></div>
+      <details style="margin-top:14px">
+        <summary>Cliente de Google</summary>
+        <p>Cliente OAuth de Google Cloud del tipo <b>TVs and Limited Input devices</b>, con la YouTube Data API v3 habilitada. Hace falta una sola vez, antes de conectar.</p>
+        <label>Client ID</label><input id="clientId" placeholder="…apps.googleusercontent.com">
+        <label>Client secret</label><input id="clientSecret" type="password">
+        <button onclick="saveGoogle()">Guardar</button>
+        <div class="msg" id="googleMsg"></div>
+      </details>
     </section>
 
     <section>
@@ -135,17 +160,62 @@ async function load() {
   const pill = (name, on, text) => `<div class="pill"><b>${name}</b><span class="${on ? "on" : "off"}">${text}</span></div>`;
   $("status").innerHTML =
     pill("Jellyfin", s.jellyfinConnected, s.jellyfinConnected ? "conectado" : "sin conectar") +
-    pill("YouTube", s.youtubeConnected, s.youtubeConnected ? "conectado" : s.youtubeConfigured ? "falta conectar en la tele" : "falta el client ID") +
+    pill("YouTube", s.youtubeConnected, s.youtubeConnected ? "conectado" : s.youtubeConfigured ? "sin conectar" : "falta el cliente de Google") +
     pill("Seerr", s.seerrConfigured, s.seerrConfigured ? "configurado" : "falta la API key") +
     pill("Fijados", s.pins > 0, String(s.pins));
   if (s.seerrUrl) $("seerrUrl").value = s.seerrUrl;
+  if (!s.youtubeConfigured) document.querySelector("details").open = true;
+  if (!$("jfUrl").value) findJellyfin();
   $("player").value = s.player;
   await loadPins();
   await loadKeys();
 }
 
+async function findJellyfin() {
+  try {
+    const servers = await api("/api/jellyfin/servers");
+    if (!$("jfUrl").value && servers.length) $("jfUrl").value = servers[0].address;
+    $("jfUrl").placeholder = servers.length ? "" : "http://…:8096 (no se encontró en la red)";
+  } catch (e) { $("jfUrl").placeholder = "http://…:8096"; }
+}
+async function connectJellyfin() {
+  msg("jfMsg", "Conectando…");
+  try {
+    await api("/api/jellyfin", { method: "POST", body: JSON.stringify({ url: $("jfUrl").value, username: $("jfUser").value, password: $("jfPass").value }) });
+    $("jfPass").value = ""; msg("jfMsg", "Conectado. La tele ya muestra tu Jellyfin."); load();
+  } catch (e) { msg("jfMsg", e.message, false); }
+}
+
+// The Clipboard API needs HTTPS; over plain http://192.168.0.4 fall back to selecting and copying the text.
+async function copyCode() {
+  const text = $("ytCodeText").textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { getSelection().selectAllChildren($("ytCodeText")); document.execCommand("copy"); }
+  msg("ytMsg", "Copiado.");
+}
+
+let ytPoll = null;
+function showYouTube(c) {
+  $("ytCode").classList.toggle("hidden", c.state !== "waiting");
+  if (c.state === "waiting") {
+    $("ytLink").href = c.url; $("ytLink").textContent = c.url.replace(/^https?:\/\/(www\.)?/, "");
+    $("ytCodeText").textContent = c.code; msg("ytMsg", "Esperando que aceptes…");
+  } else if (c.state === "connected") { msg("ytMsg", "Conectado. La fila de YouTube aparece en la tele en unos segundos."); load(); }
+  else if (c.state === "failed") msg("ytMsg", c.error || "No funcionó", false);
+  if (c.state !== "waiting") { clearInterval(ytPoll); ytPoll = null; }
+}
+async function connectYouTube() {
+  clearInterval(ytPoll); msg("ytMsg", "Pidiendo un código a Google…");
+  try {
+    showYouTube(await api("/api/youtube/connect", { method: "POST" }));
+    if (!$("ytCode").classList.contains("hidden")) ytPoll = setInterval(async () => {
+      try { showYouTube(await api("/api/youtube/connect")); } catch (e) { msg("ytMsg", e.message, false); }
+    }, 3000);
+  } catch (e) { msg("ytMsg", e.message, false); }
+}
+
 async function saveGoogle() {
-  try { await api("/api/google", { method: "POST", body: JSON.stringify({ clientId: $("clientId").value, clientSecret: $("clientSecret").value }) }); msg("googleMsg", "Guardado. Ahora conectá YouTube desde la tele."); load(); }
+  try { await api("/api/google", { method: "POST", body: JSON.stringify({ clientId: $("clientId").value, clientSecret: $("clientSecret").value }) }); msg("googleMsg", "Guardado. Ya podés conectar YouTube."); load(); }
   catch (e) { msg("googleMsg", e.message, false); }
 }
 async function saveSeerr() {
