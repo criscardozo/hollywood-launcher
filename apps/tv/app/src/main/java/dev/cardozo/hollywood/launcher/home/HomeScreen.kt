@@ -50,6 +50,7 @@ import dev.cardozo.hollywood.launcher.apps.TvApp
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.content.open
+import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.system.launch
 import dev.cardozo.hollywood.launcher.ui.Background
 import dev.cardozo.hollywood.launcher.ui.Dim
@@ -160,7 +161,8 @@ fun HomeScreen(
                 onAllApps = onAllApps,
             )
 
-            if (jellyfin == JellyfinUi.NotConnected) {
+            // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
+            if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
                 Spacer(Modifier.height(36.dp))
                 Box(Modifier.padding(start = Edge)) {
                     ActionCard(
