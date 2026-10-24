@@ -61,12 +61,19 @@ final class Discovery {
                     done(nil)
                 }
                 connection.cancel()
-            case .failed, .cancelled:
+            case .waiting, .failed:
+                // Unreachable for now (no route, refused). A connection left waiting retries forever and
+                // a failed one keeps its resources until cancelled; the next browse result tries again.
+                connection.cancel()
+            case .cancelled:
                 done(nil)
             default:
                 break
             }
         }
         connection.start(queue: .global())
+        // Nor may it hang in preparing: give up after a few seconds. Cancelling a finished connection
+        // does nothing.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) { connection.cancel() }
     }
 }
