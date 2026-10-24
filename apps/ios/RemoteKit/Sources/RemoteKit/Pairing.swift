@@ -7,8 +7,13 @@ import Foundation
 public enum Pairing {
     public static let port: UInt16 = 6467
 
-    /// - Parameter code: asked once the TV is showing it; return the six characters the user typed.
+    /// How long to wait for each of the TV's answers. Not for the code: the user takes their time.
+    static let replyTimeout: Duration = .seconds(10)
+
+    /// - Parameter code: asked once the TV is showing it; return the six characters the user typed. It is
+    ///   not timed; cancel the calling task to give up (the code closure should honour cancellation too).
     /// - Returns: the TV's key fingerprint, to pin on every later connection (RemoteSession).
+    /// - Throws: CancellationError when the task is cancelled, at any step; the connection is closed.
     @discardableResult
     public static func pair(
         host: String,
@@ -18,14 +23,45 @@ public enum Pairing {
         code: @Sendable () async throws -> String
     ) async throws -> String {
         let channel = Channel(host: host, port: port, identity: identity)
-        try await channel.open()
         defer { channel.close() }
+        do {
+            // Closing the channel unblocks whatever step is waiting (open, or a reply).
+            return try await withTaskCancellationHandler {
+                try await exchange(channel, identity: identity, clientName: clientName, code: code)
+            } onCancel: {
+                channel.close()
+            }
+        } catch {
+            // A cancelled pairing fails with whatever the closed channel said; report the cancellation.
+            if Task.isCancelled { throw CancellationError() }
+            throw error
+        }
+    }
+
+    private static func exchange(
+        _ channel: Channel,
+        identity: ClientIdentity,
+        clientName: String,
+        code: @Sendable () async throws -> String
+    ) async throws -> String {
+        try await channel.open()
 
         channel.send(Polo.pairingRequest(serviceName: "atvremote", clientName: clientName))
         var iterator = channel.messages.makeAsyncIterator()
 
         func expect(_ wanted: (Polo.Reply) -> Bool, _ step: String) async throws {
-            guard let data = try await iterator.next() else { throw RemoteError.pairing("la tele cerró la conexión (\(step))") }
+            // A TV that stops answering would leave next() waiting forever: close the channel at the
+            // deadline, which ends the stream.
+            let deadline = Task {
+                try await Task.sleep(for: replyTimeout)
+                channel.close()
+            }
+            let next = try await iterator.next()
+            deadline.cancel()
+            guard let data = next else {
+                let expired = (try? await deadline.value) != nil
+                throw RemoteError.pairing(expired ? "la tele no respondió a tiempo (\(step))" : "la tele cerró la conexión (\(step))")
+            }
             let reply = try Polo.parse(data)
             if case .error(let status) = reply {
                 throw status == 402 ? RemoteError.wrongCode : RemoteError.pairing("la tele respondió \(status) (\(step))")
@@ -43,7 +79,9 @@ public enum Pairing {
         guard let server = channel.serverPublicNumbers else {
             throw RemoteError.pairing("no se pudo leer el certificado de la tele")
         }
-        let secret = try secret(code: try await code(), client: identity.publicNumbers, server: server)
+        let typed = try await code()
+        try Task.checkCancellation()
+        let secret = try secret(code: typed, client: identity.publicNumbers, server: server)
         channel.send(Polo.secret(secret))
         try await expect({ if case .secretAck = $0 { true } else { false } }, "código")
         return server.fingerprint

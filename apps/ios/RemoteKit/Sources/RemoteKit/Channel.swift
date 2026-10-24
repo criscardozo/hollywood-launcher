@@ -17,7 +17,10 @@ final class Channel: @unchecked Sendable {
     private let port: UInt16
     private let identity: ClientIdentity
     private let pinnedFingerprint: String?
+    /// Guards [channel] and [closed]: close() can come from any thread, also while open() is running.
+    private let lock = NSLock()
     private var channel: NIOCore.Channel?
+    private var closed = false
     private let continuation: AsyncThrowingStream<Data, Error>.Continuation
     private(set) var serverPublicNumbers: RSAPublicNumbers?
 
@@ -32,7 +35,13 @@ final class Channel: @unchecked Sendable {
         (messages, continuation) = AsyncThrowingStream.makeStream()
     }
 
-    /// Connects and completes the TLS handshake; throws if the TV refuses (e.g. we are not paired).
+    /// TCP connect and TLS handshake each get this long. A TV that accepts the connection but never
+    /// answers the handshake (asleep, or a half-dead socket after a network change) would otherwise
+    /// hang open() forever.
+    static let timeout: TimeAmount = .seconds(8)
+
+    /// Connects and completes the TLS handshake; throws if the TV refuses (e.g. we are not paired), if it
+    /// takes longer than [timeout], or if close() is called meanwhile.
     func open() async throws {
         var config = TLSConfiguration.makeClientConfiguration()
         config.certificateVerification = .none
@@ -44,8 +53,9 @@ final class Channel: @unchecked Sendable {
         let handshake = group.any().makePromise(of: Void.self)
         let continuation = self.continuation
         do {
+            guard !lock.withLock({ closed }) else { throw ClosedWhileOpening() }
             let channel = try await ClientBootstrap(group: group)
-                .connectTimeout(.seconds(8))
+                .connectTimeout(Self.timeout)
                 .channelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         let ops = channel.pipeline.syncOperations
@@ -56,7 +66,20 @@ final class Channel: @unchecked Sendable {
                 }
                 .connect(host: host, port: Int(port))
                 .get()
-            self.channel = channel
+            // close() may have run while connecting; it found no channel to close, so close this one.
+            let adopted = lock.withLock { () -> Bool in
+                if closed { return false }
+                self.channel = channel
+                return true
+            }
+            guard adopted else {
+                channel.close(promise: nil)
+                throw ClosedWhileOpening()
+            }
+            let deadline = channel.eventLoop.scheduleTask(in: Self.timeout) {
+                handshake.fail(HandshakeTimeout())
+            }
+            handshake.futureResult.whenComplete { _ in deadline.cancel() }
             try await handshake.futureResult.get()
             let spki = try await channel.eventLoop.submit { () -> [UInt8]? in
                 let ssl = try channel.pipeline.syncOperations.handler(type: NIOSSLClientHandler.self)
@@ -77,19 +100,34 @@ final class Channel: @unchecked Sendable {
     }
 
     func send(_ message: Data) {
-        guard let channel else { return }
+        guard let channel = lock.withLock({ channel }) else { return }
         var buffer = channel.allocator.buffer(capacity: message.count + 5)
         buffer.writeBytes(encodeVarint(UInt64(message.count)))
         buffer.writeBytes(message)
         channel.writeAndFlush(buffer, promise: nil)
     }
 
+    /// Closes the connection, or makes a running open() give up. [messages] ends either way.
     func close() {
+        let channel = lock.withLock { () -> NIOCore.Channel? in
+            closed = true
+            return self.channel
+        }
         channel?.close(promise: nil)
+        continuation.finish()
     }
 }
 
 private struct PinMismatch: Error {}
+
+private struct ClosedWhileOpening: Error, CustomStringConvertible {
+    var description: String { "closed while connecting" }
+}
+
+/// Worded so RemoteModel.explain reads it as "the TV does not answer", not as a refused certificate.
+private struct HandshakeTimeout: Error, CustomStringConvertible {
+    var description: String { "TLS timed out" }
+}
 
 /// A frame header the decoder will not wait on; the channel closes (MessageHandler.errorCaught).
 enum FrameError: Error {
