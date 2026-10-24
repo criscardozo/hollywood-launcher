@@ -4,6 +4,9 @@ import RemoteKit
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(macOS)
+import SystemConfiguration
+#endif
 
 /// Everything the screens need: which TV, whether it is paired and connected, what it reports, and
 /// the commands. One TV at a time; it is remembered between launches.
@@ -31,6 +34,11 @@ final class RemoteModel {
 
     private var session: RemoteSession?
     private var updates: Task<Void, Never>?
+    /// The connect in flight. Screens, scene changes, key presses and the Mac popover all ask to
+    /// connect, often at once; they share this one instead of each opening a session.
+    private var connecting: Task<Void, Never>?
+    /// The pairing in flight, so Cancel can stop it at any step.
+    private var pairing: Task<Void, Never>?
     private var codeContinuation: CheckedContinuation<String, Error>?
     private let defaults = UserDefaults.standard
 
@@ -55,33 +63,65 @@ final class RemoteModel {
 
     // MARK: Connection
 
+    /// Connects to the known TV unless already connected or pairing; .failed is retried. Joins the
+    /// connect in flight when there is one, and returns when it is over.
     func connectIfNeeded() async {
-        guard !demo, let host, phase != .connected, phase != .pairing, phase != .enteringCode else { return }
+        guard !demo, host != nil, phase != .connected, phase != .pairing, phase != .enteringCode else { return }
+        let attempt = connecting ?? startConnecting()
+        await attempt.value
+    }
+
+    private func startConnecting() -> Task<Void, Never> {
+        let attempt = Task { await connect() }
+        connecting = attempt
+        return attempt
+    }
+
+    /// One attempt. Whoever supersedes it (disconnect, pairing, forgetting the TV) cancels it and moves
+    /// on, so a cancelled attempt closes what it opened and leaves the state alone.
+    private func connect() async {
+        defer { if !Task.isCancelled { connecting = nil } }
+        guard let host else { return }
         phase = .connecting
         guard let tvKey = defaults.string(forKey: "tvKey") else {
             phase = .failed("Falta emparejar con la tele.")
             return
         }
         do {
-            let identity = try ClientIdentity.keychain()
+            // Without a stored identity there is nothing the TV knows: a new one would only be refused.
+            guard let identity = try ClientIdentity.storedInKeychain() else {
+                phase = .failed("Falta emparejar con la tele.")
+                return
+            }
             let session = RemoteSession(host: host, identity: identity, pinnedFingerprint: tvKey,
                                         deviceName: Device.name)
             try await session.connect()
-            self.session = session
-            state = session.current
-            phase = .connected
-            updates?.cancel()
-            updates = Task { [weak self] in
-                for await state in session.updates {
-                    self?.state = state
-                }
-                // The stream ends when the TV closes the connection.
-                guard let self, self.session === session else { return }
-                self.session = nil
-                self.phase = .failed("Se cortó la conexión con la tele")
+            guard !Task.isCancelled else {
+                session.close()
+                return
             }
+            adopt(session)
         } catch {
+            guard !Task.isCancelled else { return }
             phase = .failed(Self.explain(error))
+        }
+    }
+
+    private func adopt(_ session: RemoteSession) {
+        self.session?.close()
+        self.session = session
+        state = session.current
+        phase = .connected
+        updates?.cancel()
+        updates = Task { [weak self] in
+            for await state in session.updates {
+                self?.state = state
+            }
+            // The stream ends when the TV closes the connection, or when the session gives up on a
+            // silent one (RemoteSession.silenceLimit).
+            guard let self, self.session === session else { return }
+            self.session = nil
+            self.phase = .failed("Se cortó la conexión con la tele")
         }
     }
 
@@ -97,8 +137,12 @@ final class RemoteModel {
         return error.localizedDescription
     }
 
+    /// Drops the connection, and any connect in flight.
     func disconnect() {
+        connecting?.cancel()
+        connecting = nil
         updates?.cancel()
+        updates = nil
         session?.close()
         session = nil
         if phase == .connected { phase = .connecting }
