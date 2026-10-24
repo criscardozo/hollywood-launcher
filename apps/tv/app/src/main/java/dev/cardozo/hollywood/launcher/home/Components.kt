@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -46,8 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import dev.cardozo.hollywood.launcher.apps.TvApp
@@ -170,9 +169,13 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean 
 private fun ShowingBar(modifier: Modifier = Modifier) {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) { progress.animateTo(1f, tween(HERO_ROTATE_MS.toInt(), easing = LinearEasing)) }
-    Box(modifier.fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.45f))) {
-        Box(Modifier.fillMaxWidth(progress.value).fillMaxHeight().background(Color.White))
-    }
+    // The fill is drawn, not laid out: reading the animation only while drawing keeps it from recomposing
+    // and measuring every frame for as long as Home sits idle.
+    Box(
+        modifier.fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.45f)).drawBehind {
+            drawRect(Color.White, size = size.copy(width = size.width * progress.value))
+        },
+    )
 }
 
 @Composable
@@ -269,14 +272,14 @@ fun TopBar(weather: Weather?, notice: String?, modifier: Modifier = Modifier) {
 
 /** A tile in the last row of Home, for the TV's own screens (inputs, settings). */
 @Composable
-fun SystemTile(label: String, symbol: String? = null, icon: Painter? = null, onClick: () -> Unit) {
+fun SystemTile(label: String, symbol: String? = null, icon: Painter? = null, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
         scale = CardDefaults.scale(focusedScale = 1.08f),
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
-        modifier = Modifier.size(150.dp, 61.dp),
+        modifier = modifier.size(150.dp, 61.dp),
     ) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -291,10 +294,11 @@ private val ClockFormat = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 fun Clock(fontSize: Int = 17) {
+    // Wakes once a minute, on the minute, rather than every second for as long as the launcher lives.
     val time by produceState(LocalTime.now().format(ClockFormat)) {
         while (true) {
             value = LocalTime.now().format(ClockFormat)
-            delay(1_000)
+            delay(60_000 - System.currentTimeMillis() % 60_000 + 50)
         }
     }
     Text(time, fontSize = fontSize.sp, fontWeight = FontWeight.SemiBold, color = Foreground)

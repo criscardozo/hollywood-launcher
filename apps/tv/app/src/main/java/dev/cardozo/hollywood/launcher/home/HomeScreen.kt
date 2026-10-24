@@ -33,9 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.SingletonImageLoader
@@ -87,6 +88,7 @@ import dev.cardozo.hollywood.launcher.ui.Dim
 import dev.cardozo.hollywood.launcher.ui.Faint
 import dev.cardozo.hollywood.launcher.ui.Foreground
 import androidx.tv.material3.Text
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -95,6 +97,14 @@ private val Edge = 48.dp
 
 /** With no key pressed for this long, the hero starts walking the focused row on its own. */
 private const val IDLE_BEFORE_ROTATING_MS = 10_000L
+/** Which row has focus; with the id of the focused card, what the hero shows. */
+private enum class RowKey { SHELF, RECENT, VIDEOS, PINNED, OTHER }
+
+private data class Focused(val row: RowKey, val id: String)
+
+/** A role dialog «answered» faster than this was never shown (Google TV declined it). */
+private const val DIALOG_NOT_SHOWN_MS = 700L
+
 /** How often Home asks Jellyfin's server again while it does not answer. */
 private const val JELLYFIN_RETRY_MS = 2 * 60_000L
 
@@ -122,22 +132,38 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
-    val dock by viewModel.dock.collectAsState()
-    val jellyfin by viewModel.jellyfin.collectAsState()
-    val wallpaper by viewModel.wallpaper.collectAsState()
-    val youtube by viewModel.youtube.collectAsState()
-    val pinned by viewModel.pinned.collectAsState()
-    val settings by viewModel.settings.collectAsState()
-    val weather by viewModel.weather.collectAsState()
+    val dock by viewModel.dock.collectAsStateWithLifecycle()
+    val jellyfin by viewModel.jellyfin.collectAsStateWithLifecycle()
+    val wallpaper by viewModel.wallpaper.collectAsStateWithLifecycle()
+    val youtube by viewModel.youtube.collectAsStateWithLifecycle()
+    val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val weather by viewModel.weather.collectAsStateWithLifecycle()
 
     // The shelf follows the app last focused in the dock; the hero follows whatever is focused.
     var shelfApp by remember { mutableStateOf<String?>(null) }
-    var focusedItem by remember { mutableStateOf<MediaItem?>(null) }
     val shelf = viewModel.shelfFor(shelfApp, jellyfin, youtube, pinned)
-    // The row the focus is in; with the dock focused, that app's shelf.
-    var focusedRow by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     val shelfItems = (shelf as? Shelf.Items)?.items.orEmpty()
-    val row = if (focusedItem != null) focusedRow else shelfItems
+    val recent = (jellyfin as? JellyfinUi.Ready)?.home?.recentlyAdded.orEmpty()
+    // The first videos live in YouTube's shelf; without the YouTube app in the dock they all go here.
+    val videos = (youtube as? YouTubeUi.Ready)?.videos.orEmpty()
+    val youtubeInDock = dock.any { it.packageName == Source.YOUTUBE.packageName }
+    val moreVideos = if (youtubeInDock) videos.drop(SHELF_SIZE) else videos
+
+    // What has focus, as a row and an id, never a copy of the item: the lists are replaced when Home
+    // refreshes (coming back from a player) while focus stays put, and the hero must show the new data.
+    var focus by remember { mutableStateOf<Focused?>(null) }
+    fun rowOf(key: RowKey): List<MediaItem> = when (key) {
+        RowKey.SHELF -> shelfItems
+        RowKey.RECENT -> recent
+        RowKey.VIDEOS -> moreVideos
+        RowKey.PINNED -> pinned
+        RowKey.OTHER -> emptyList()
+    }
+    val focusedItem = focus?.let { f -> rowOf(f.row).firstOrNull { it.id == f.id } }
+    // The row the hero walks: the focused one, or with the dock focused, that app's shelf. None while focus is
+    // on something that is not a card (the TV row, a connect card).
+    val row = focus?.let { rowOf(it.row) } ?: shelfItems
 
     // Left alone, the hero walks the row so the screen has some movement. Focus never moves, so OK still
     // opens what was chosen; any key brings the hero back. Paused while Home is not on screen.
@@ -191,10 +217,17 @@ fun HomeScreen(
     // «Usar como inicio» shows until Hollywood holds the HOME role; checked again whenever Home comes back.
     var isDefaultHome by remember { mutableStateOf(context.isDefaultHome()) }
     LaunchedEffect(onScreen) { if (onScreen) isDefaultHome = context.isDefaultHome() }
+    val settingsTile = remember { FocusRequester() }
+    var askedAt by remember { mutableLongStateOf(0L) }
     val askForHome = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         isDefaultHome = context.isDefaultHome()
-        // Google TV may turn the dialog down without showing it: then the Home app setting.
-        if (!isDefaultHome && it.resultCode != Activity.RESULT_OK) context.openHomeSettings()
+        // The tile that had focus is gone now: hand focus to its neighbour rather than lose it.
+        if (isDefaultHome) runCatching { settingsTile.requestFocus() }
+        // Google TV may turn the dialog down without showing it, which comes back at once: then the Home app
+        // setting. A «Cancel» the user chose takes longer and is respected.
+        else if (it.resultCode != Activity.RESULT_OK && System.currentTimeMillis() - askedAt < DIALOG_NOT_SHOWN_MS) {
+            context.openHomeSettings()
+        }
     }
     var wasActive by remember { mutableStateOf(active) }
     LaunchedEffect(active) {
@@ -205,11 +238,18 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     // Back on the shelf or the dock, the page returns to the top so the hero is visible again. The wait lets
     // the focus change's own bring-into-view scroll finish first; otherwise it wins and the page stays down.
+    // Focus moving on to a lower row cancels it, or it would scroll that row off screen.
+    var toTopJob by remember { mutableStateOf<Job?>(null) }
     val toTop: () -> Unit = {
-        scope.launch {
+        toTopJob?.cancel()
+        toTopJob = scope.launch {
             delay(50)
             scroll.animateScrollTo(0)
         }
+    }
+    val focusBelow: (RowKey, MediaItem) -> Unit = { key, item ->
+        toTopJob?.cancel()
+        focus = Focused(key, item.id)
     }
     LaunchedEffect(dock.isNotEmpty(), focusDockSignal) {
         if (dock.isNotEmpty()) {
@@ -263,7 +303,7 @@ fun HomeScreen(
                 ShelfRow(
                     shelf = shelf,
                     showing = showing,
-                    onFocusItem = { focusedItem = it; focusedRow = shelfItems; toTop() },
+                    onFocusItem = { focus = Focused(RowKey.SHELF, it.id); toTop() },
                     onPlay = play,
                     onConnectJellyfin = onConnectJellyfin,
                     onConnectYouTube = onConnectYouTube,
@@ -277,7 +317,7 @@ fun HomeScreen(
                     onFocusApp = { app ->
                         toTop()
                         shelfApp = app.packageName
-                        focusedItem = null
+                        focus = null
                     },
                     onOpen = { context.launch(it) },
                     onAllApps = onAllApps,
@@ -286,7 +326,7 @@ fun HomeScreen(
                 // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
                 if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
                     Spacer(Modifier.height(36.dp))
-                    Box(Modifier.padding(start = Edge)) {
+                    Box(Modifier.padding(start = Edge).onFocusChanged { if (it.hasFocus) focus = Focused(RowKey.OTHER, "") }) {
                         ActionCard(
                         title = "Conectar Jellyfin",
                         subtitle = "Con un código de Quick Connect, sin escribir contraseñas",
@@ -294,27 +334,22 @@ fun HomeScreen(
                         )
                     }
                 }
-                val recent = (jellyfin as? JellyfinUi.Ready)?.home?.recentlyAdded.orEmpty()
                 if (recent.isNotEmpty()) {
                     Spacer(Modifier.height(36.dp))
                     Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
-                    PosterRow(recent, showing, onFocusItem = { focusedItem = it; focusedRow = recent }, onPlay = play)
+                    PosterRow(recent, showing, onFocusItem = { focusBelow(RowKey.RECENT, it) }, onPlay = play)
                 }
-                // The first videos live in YouTube's shelf; without the YouTube app in the dock they all go here.
-                val videos = (youtube as? YouTubeUi.Ready)?.videos.orEmpty()
-                val youtubeInDock = dock.any { it.packageName == Source.YOUTUBE.packageName }
-                val moreVideos = if (youtubeInDock) videos.drop(SHELF_SIZE) else videos
                 if (moreVideos.isNotEmpty()) {
                     Spacer(Modifier.height(28.dp))
                     Box(Modifier.padding(start = Edge)) {
                         RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
                     }
-                    MediaRow(moreVideos, showing, onFocusItem = { focusedItem = it; focusedRow = moreVideos }, onPlay = play)
+                    MediaRow(moreVideos, showing, onFocusItem = { focusBelow(RowKey.VIDEOS, it) }, onPlay = play)
                 }
                 if (pinned.isNotEmpty()) {
                     Spacer(Modifier.height(28.dp))
                     Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
-                    MediaRow(pinned, showing, onFocusItem = { focusedItem = it; focusedRow = pinned }, onPlay = play)
+                    MediaRow(pinned, showing, onFocusItem = { focusBelow(RowKey.PINNED, it) }, onPlay = play)
                 }
                 // The TV's own screens, last: they used to float in the top bar, where focus could get stuck.
                 Spacer(Modifier.height(28.dp))
@@ -323,17 +358,28 @@ fun HomeScreen(
                     Modifier
                         // Focus would only bring the tile itself into view, flush with the bottom of the screen.
                         .bringIntoViewRequester(tvRow)
-                        .onFocusChanged { if (it.hasFocus) scope.launch { tvRow.bringIntoView() } }
+                        .onFocusChanged {
+                            if (it.hasFocus) {
+                                toTopJob?.cancel()
+                                focus = Focused(RowKey.OTHER, "")
+                                scope.launch { tvRow.bringIntoView() }
+                            }
+                        }
                         .padding(start = Edge, top = 8.dp, bottom = 28.dp),
                     horizontalArrangement = Arrangement.spacedBy(13.dp),
                 ) {
                     SystemTile("PlayStation 5", icon = painterResource(R.drawable.playstation)) { context.openInput(PLAYSTATION_INPUT) }
                     SystemTile("Entradas", "⇄") { context.openInputs() }
-                    SystemTile("Ajustes", "⚙") { context.openSettings() }
+                    SystemTile("Ajustes", "⚙", modifier = Modifier.focusRequester(settingsTile)) { context.openSettings() }
                     if (!isDefaultHome) {
                         SystemTile("Usar como inicio", "⌂") {
                             val dialog = context.requestDefaultHomeIntent()
-                            if (dialog != null) askForHome.launch(dialog) else context.openHomeSettings()
+                            if (dialog != null) {
+                                askedAt = System.currentTimeMillis()
+                                askForHome.launch(dialog)
+                            } else {
+                                context.openHomeSettings()
+                            }
                         }
                     }
                 }

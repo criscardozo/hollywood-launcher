@@ -26,7 +26,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -47,6 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -82,19 +85,35 @@ fun DetailsScreen(item: MediaItem, player: Player, onPlay: (MediaItem) -> Unit) 
     val fallback = remember(item.id) {
         Details.from(item, if (item.source == Source.JELLYFIN) "Reproducir" else "Abrir en ${item.source.label}")
     }
-    // The card's own data first, so the page never opens empty; the rest replaces it once it loads.
-    val details by produceState(fallback, item.id) {
-        value = runCatching { load(app, item) }
+    // The card's own data first, so the page never opens empty; the rest replaces it once it loads. It loads
+    // again each time the launcher comes back (after playing, say), so «Continuar» resumes from where the
+    // player left off and not from where it was when the page opened.
+    var details by remember(item.id) { mutableStateOf(fallback) }
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val resumed = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(item.id, resumed) {
+        if (!resumed) return@LaunchedEffect
+        details = runCatching { load(app, item) }
             .onFailure { Log.w(TAG, "Details for ${item.id} did not load", it) }
-            .getOrNull() ?: fallback
+            .getOrNull() ?: details
     }
+
+    // Focus starts on the first button once. If what had focus goes away (the buttons change once the page
+    // loads), it returns to the page instead of being lost, which would let the next key reach Home below.
     val firstButton = remember { FocusRequester() }
-    LaunchedEffect(details.actions.firstOrNull()?.label) { runCatching { firstButton.requestFocus() } }
+    val page = remember { FocusRequester() }
+    var hasFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { runCatching { firstButton.requestFocus() } }
+    LaunchedEffect(details) {
+        if (!hasFocus) runCatching { firstButton.requestFocus() }.onFailure { runCatching { page.requestFocus() } }
+    }
 
     Box(
         Modifier
             .fillMaxSize()
             .background(Background)
+            .onFocusChanged { hasFocus = it.hasFocus }
+            .focusRequester(page)
             .focusProperties { onExit = { cancelFocusChange() } }
             .focusGroup(),
     ) {
@@ -287,12 +306,15 @@ private fun Cast(cast: List<Person>) {
 private fun Episodes(details: Details, onPlay: (MediaItem) -> Unit) {
     val app = LocalContext.current.launcherApp
     var season by remember(details.seasonId) { mutableStateOf(details.seasonId) }
-    val episodes by produceState(emptyList<MediaItem>(), details.seriesId, season) {
-        val seriesId = details.seriesId ?: return@produceState
-        val seasonId = season ?: return@produceState
-        value = runCatching { app.jellyfin.episodes(seriesId, seasonId) }
+    // A new season starts empty; a reload of the page (after playing) keeps the list, and the focus on it,
+    // while watched marks and progress update.
+    var episodes by remember(details.seriesId, season) { mutableStateOf(emptyList<MediaItem>()) }
+    LaunchedEffect(details, season) {
+        val seriesId = details.seriesId ?: return@LaunchedEffect
+        val seasonId = season ?: return@LaunchedEffect
+        runCatching { app.jellyfin.episodes(seriesId, seasonId) }
+            .onSuccess { episodes = it }
             .onFailure { Log.w(TAG, "Episodes of $seasonId did not load", it) }
-            .getOrDefault(emptyList())
     }
     Row(Modifier.padding(start = Edge, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         details.seasons.forEach { s ->

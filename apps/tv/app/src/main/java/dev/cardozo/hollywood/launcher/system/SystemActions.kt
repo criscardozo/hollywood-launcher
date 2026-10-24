@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.tv.TvContract
+import android.media.tv.TvInputInfo
+import android.media.tv.TvInputManager
 import android.provider.Settings
 import android.util.Log
 import dev.cardozo.hollywood.launcher.apps.TvApp
@@ -60,7 +62,22 @@ fun Context.openHomeSettings(): Boolean =
  * 16, hdmi_port=2); its live TV app (com.tcl.tv) opens passthrough inputs.
  */
 const val PLAYSTATION_INPUT = "com.tcl.tvinput/.TvPassThroughService/HW16"
+private const val PLAYSTATION_PORT = 2
 
 /** Switches the TV to an HDMI input, the way the system's input picker does. */
 fun Context.openInput(inputId: String): Boolean =
-    start(Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(inputId)))
+    start(Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(resolveInput(inputId))))
+
+/**
+ * The input's current id. A firmware update or HDMI-CEC could renumber it: when the known id is no longer
+ * listed, the HDMI input whose label ends in its port number («HDMI 2») stands in.
+ */
+private fun Context.resolveInput(inputId: String): String {
+    val inputs = runCatching { getSystemService(TvInputManager::class.java)?.tvInputList }.getOrNull().orEmpty()
+    if (inputs.isEmpty() || inputs.any { it.id == inputId }) return inputId
+    val port = PLAYSTATION_PORT.toString()
+    return inputs.firstOrNull { info ->
+        info.type == TvInputInfo.TYPE_HDMI && info.parentId == null &&
+            info.loadLabel(this).toString().replace(" ", "").endsWith("HDMI$port", ignoreCase = true)
+    }?.id ?: inputId
+}

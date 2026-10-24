@@ -11,10 +11,13 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 
 data class TvApp(
     val packageName: String,
@@ -29,12 +32,20 @@ class InstalledApps(private val context: Context) {
 
     private val pm: PackageManager = context.packageManager
 
-    /** Every app a TV home screen can open, refreshed whenever a package is added, removed or changed. */
+    /**
+     * Every app a TV home screen can open, refreshed when a package is added, removed or changed. The
+     * receiver only signals: the reload runs on IO, once per burst (an update sends removed, added and
+     * changed in a row). CHANGED also fires whenever any app toggles one of its own components, which Play
+     * Services does often, so it only counts for an app that is listed or that can now be launched.
+     */
+    @OptIn(FlowPreview::class)
     fun observe(): Flow<List<TvApp>> = callbackFlow {
-        trySend(load())
+        trySend(true) // the first load, at once
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, intent: Intent) {
-                trySend(load())
+                val pkg = intent.data?.schemeSpecificPart
+                if (intent.action == Intent.ACTION_PACKAGE_CHANGED && pkg != null && pkg !in listed && !launchable(pkg)) return
+                trySend(false)
             }
         }
         val filter = IntentFilter().apply {
@@ -45,7 +56,13 @@ class InstalledApps(private val context: Context) {
         }
         context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         awaitClose { context.unregisterReceiver(receiver) }
-    }.flowOn(Dispatchers.IO)
+    }.debounce { first -> if (first) 0L else 500L }.map { load() }.flowOn(Dispatchers.IO)
+
+    /** The packages of the last load, for the receiver's filter. */
+    @Volatile private var listed: Set<String> = emptySet()
+
+    private fun launchable(pkg: String): Boolean =
+        pm.getLeanbackLaunchIntentForPackage(pkg) != null || pm.getLaunchIntentForPackage(pkg) != null
 
     private fun load(): List<TvApp> {
         val leanback = query(Intent.CATEGORY_LEANBACK_LAUNCHER)
@@ -57,6 +74,7 @@ class InstalledApps(private val context: Context) {
             .distinctBy { it.activityInfo.packageName }
             .map(::toTvApp)
             .sortedBy { it.label.lowercase() }
+            .also { apps -> listed = apps.mapTo(HashSet()) { it.packageName } }
     }
 
     private fun query(category: String): List<ResolveInfo> =

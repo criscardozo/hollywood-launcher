@@ -62,7 +62,8 @@ class ClockDream : DreamService() {
         super.onAttachedToWindow()
         isInteractive = false
         isFullscreen = true
-        isScreenBright = false
+        // Full brightness: the films are the point now. The clock-only version dimmed the screen.
+        isScreenBright = true
 
         front = imageView()
         back = imageView().apply { alpha = 0f }
@@ -163,8 +164,10 @@ class ClockDream : DreamService() {
                 continue
             }
             failures = 0
+            // The poster first, so the new backdrop never fades in under the previous film's text.
+            val poster = load(slide.posterUrl, 400, 600)
             crossfade(backdrop)
-            showInfo(slide, load(slide.posterUrl, 400, 600))
+            showInfo(slide, poster)
             delay(SLIDE_EVERY_MS)
         }
     }
