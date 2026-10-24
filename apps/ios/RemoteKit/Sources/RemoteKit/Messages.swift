@@ -140,7 +140,8 @@ enum Remote {
         return w.data
     }
 
-    /// Replaces the focused text field's content, as androidtvremote2's send_text does.
+    /// Replaces the focused text field's content, as androidtvremote2's send_text does. Empty text
+    /// clears the field, with the cursor at 0.
     static func text(_ text: String, imeCounter: Int, fieldCounter: Int) -> Data {
         let last = max(text.count - 1, 0)
         var w = ProtoWriter()

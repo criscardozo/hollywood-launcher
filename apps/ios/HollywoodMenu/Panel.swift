@@ -24,6 +24,7 @@ struct PanelRoot: View {
 struct RemotePanel: View {
     @Environment(RemoteModel.self) private var model
     @State private var text = ""
+    @State private var submitted = false
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -38,8 +39,13 @@ struct RemotePanel: View {
                     apps
                     TextField("Escribir en la tele…", text: $text)
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: text) { _, new in model.type(new) }
-                        .onSubmit { model.press(.enter); text = "" }
+                        .onChange(of: text) { _, new in
+                            // Emptying the field here after ↩ is only local: the search was sent, and an
+                            // empty text would clear it on the TV too.
+                            if new.isEmpty && submitted { submitted = false; return }
+                            model.type(new)
+                        }
+                        .onSubmit { model.press(.enter); submitted = !text.isEmpty; text = "" }
                     Text("←↑↓→ mover · ↩ OK · esc atrás · h inicio · ⌥⌘H abrir")
                         .font(.system(size: 10.5)).foregroundStyle(Theme.dim.opacity(0.7))
                 }

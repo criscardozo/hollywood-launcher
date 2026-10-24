@@ -121,9 +121,14 @@ public final class RemoteSession: @unchecked Sendable {
         channel.send(Remote.appLink(link))
     }
 
-    /// Replaces the text of the TV's focused text field (needs the TV keyboard to be open).
+    /// Replaces the text of the TV's focused text field (needs the TV keyboard to be open). An empty
+    /// string clears it.
+    ///
+    /// Clearing is the same IME batch edit with an empty value, not DEL key presses: the edit names the
+    /// field (its counters), so once the TV keyboard has closed it goes nowhere, while a DEL would land
+    /// on whatever has focus (some apps take it as Back). androidtvremote2 refuses empty text, so this
+    /// one is ours; shrinking the text already works the same way, by sending the shorter value.
     public func type(_ text: String) {
-        guard !text.isEmpty else { return }
         let (ime, field) = lock.withLock { (imeCounter, fieldCounter) }
         channel.send(Remote.text(text, imeCounter: ime, fieldCounter: field))
     }
