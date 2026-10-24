@@ -4,6 +4,9 @@ import RemoteKit
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(macOS)
+import SystemConfiguration
+#endif
 
 /// Everything the screens need: which TV, whether it is paired and connected, what it reports, and
 /// the commands. One TV at a time; it is remembered between launches.
@@ -275,7 +278,9 @@ enum Device {
         #if canImport(UIKit)
         UIDevice.current.name
         #else
-        Host.current().localizedName ?? "Mac"
+        // Not Host.current().localizedName: it can block on the network. This is the name in System
+        // Settings › General › Sharing, read locally.
+        SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "Mac"
         #endif
     }
 
