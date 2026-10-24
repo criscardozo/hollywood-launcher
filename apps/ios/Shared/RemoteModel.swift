@@ -4,9 +4,6 @@ import RemoteKit
 #if canImport(UIKit)
 import UIKit
 #endif
-#if os(macOS)
-import SystemConfiguration
-#endif
 
 /// Everything the screens need: which TV, whether it is paired and connected, what it reports, and
 /// the commands. One TV at a time; it is remembered between launches.
@@ -150,22 +147,30 @@ final class RemoteModel {
 
     // MARK: Pairing
 
-    /// Starts pairing with a TV; the code arrives through [submitCode].
+    /// Starts pairing with a TV; the code arrives through [submitCode]. Returns when pairing is over:
+    /// paired and connecting, failed (in [pairingError]), or cancelled.
     func pair(host: String, name: String) async {
+        stopPairing()
         disconnect()
         pairingError = nil
         phase = .pairing
+        let attempt = Task { await runPairing(host: host, name: name) }
+        pairing = attempt
+        await attempt.value
+    }
+
+    /// Pairs a new identity, kept in memory until the TV accepts it: the stored one, which the TV
+    /// already knows, survives a re-pair that is cancelled or fails.
+    private func runPairing(host: String, name: String) async {
         do {
-            ClientIdentity.deleteKeychain()
-            let identity = try ClientIdentity.keychain()
-            let tvKey = try await Pairing.pair(host: host, identity: identity, clientName: Device.name) { [weak self] in
-                try await withCheckedThrowingContinuation { continuation in
-                    Task { @MainActor in
-                        self?.codeContinuation = continuation
-                        self?.phase = .enteringCode
-                    }
-                }
+            let identity = try ClientIdentity.generate()
+            let tvKey = try await Pairing.pair(host: host, identity: identity, clientName: Device.name) { @MainActor [weak self] in
+                guard let self else { throw CancellationError() }
+                return try await self.waitForCode()
             }
+            try Task.checkCancellation()
+            try identity.saveToKeychain()
+            pairing = nil
             self.host = host
             tvName = name
             defaults.set(host, forKey: "host")
@@ -175,24 +180,59 @@ final class RemoteModel {
             phase = .connecting
             await connectIfNeeded()
         } catch {
+            // Whoever cancelled (Cancel, another pairing, forgetting the TV) has already set the phase.
+            guard !(error is CancellationError), !Task.isCancelled else { return }
+            pairing = nil
             pairingError = error.localizedDescription
             phase = .noTV
         }
     }
 
-    func submitCode(_ code: String) {
-        codeContinuation?.resume(returning: code)
-        codeContinuation = nil
-        phase = .pairing
+    /// Shows the code screen and waits for [submitCode]. Cancelling the pairing resumes it with
+    /// CancellationError, so Pairing.pair stops instead of waiting for a code nobody will type.
+    private func waitForCode() async throws -> String {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                codeContinuation = continuation
+                phase = .enteringCode
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.codeContinuation?.resume(throwing: CancellationError())
+                self?.codeContinuation = nil
+            }
+        }
     }
 
+    func submitCode(_ code: String) {
+        guard let continuation = codeContinuation else { return }
+        codeContinuation = nil
+        phase = .pairing
+        continuation.resume(returning: code)
+    }
+
+    /// Stops pairing at whatever step it is ("Hablando con la tele…" too) and goes back to the TV
+    /// already paired, if any.
     func cancelPairing() {
+        stopPairing()
+        pairingError = nil
+        phase = host == nil ? .noTV : .connecting
+        if host != nil { Task { await connectIfNeeded() } }
+    }
+
+    private func stopPairing() {
+        pairing?.cancel()
+        pairing = nil
         codeContinuation?.resume(throwing: CancellationError())
         codeContinuation = nil
-        phase = host == nil ? .noTV : .connecting
     }
 
     func forgetTV() {
+        stopPairing()
         disconnect()
         ClientIdentity.deleteKeychain()
         defaults.removeObject(forKey: "host")
