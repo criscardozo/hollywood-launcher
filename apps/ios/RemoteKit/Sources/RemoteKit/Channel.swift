@@ -91,14 +91,29 @@ final class Channel: @unchecked Sendable {
 
 private struct PinMismatch: Error {}
 
+/// A frame header the decoder will not wait on; the channel closes (MessageHandler.errorCaught).
+enum FrameError: Error {
+    case badLength
+    case tooLarge(UInt64)
+}
+
 /// Splits the TLS stream into messages: each is preceded by its length as a varint, and either may
 /// arrive in pieces.
 private struct VarintFrameDecoder: ByteToMessageDecoder {
     typealias InboundOut = ByteBuffer
 
+    /// The TV's messages are a few hundred bytes. Anything near this is garbage, and waiting for it
+    /// would let the buffer grow without bound.
+    static let maxFrame: UInt64 = 64 * 1024
+
     func decode(context: ChannelHandlerContext, buffer: inout ByteBuffer) throws -> DecodingState {
         guard let bytes = buffer.getBytes(at: buffer.readerIndex, length: min(buffer.readableBytes, 10)),
-              let (length, headerSize) = decodeVarint(Data(bytes), at: 0) else { return .needMoreData }
+              let (length, headerSize) = decodeVarint(Data(bytes), at: 0) else {
+            // Ten bytes without the varint ending is not a length at all.
+            if buffer.readableBytes >= 10 { throw FrameError.badLength }
+            return .needMoreData
+        }
+        guard length <= Self.maxFrame else { throw FrameError.tooLarge(length) }
         guard buffer.readableBytes >= headerSize + Int(length) else { return .needMoreData }
         buffer.moveReaderIndex(forwardBy: headerSize)
         context.fireChannelRead(wrapInboundOut(buffer.readSlice(length: Int(length))!))

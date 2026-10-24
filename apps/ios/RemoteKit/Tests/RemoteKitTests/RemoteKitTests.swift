@@ -49,3 +49,12 @@ import Testing
     #expect(good.count == 1)
     #expect(throws: RemoteError.self) { try Pairing.secret(code: "ZZ1234", client: client, server: server) }
 }
+
+@Test func hostileLengthsThrowInsteadOfTrapping() {
+    // Field 1, length-delimited, claiming 2^64 - 1 bytes: must not reach Int(length).
+    let huge = Data([0x0A] + encodeVarint(.max))
+    #expect(throws: ProtoError.self) { try ProtoMessage(huge) }
+    // A length one past the end, and a fixed64 cut short.
+    #expect(throws: ProtoError.self) { try ProtoMessage(Data([0x0A, 0x02, 0x41])) }
+    #expect(throws: ProtoError.self) { try ProtoMessage(Data([0x09, 0x01, 0x02])) }
+}

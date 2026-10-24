@@ -77,13 +77,19 @@ struct ProtoMessage {
                 varints[field, default: []].append(value)
                 i = next
             case 2:
-                guard let (length, start) = decodeVarint(data, at: afterKey) else { throw ProtoError.truncated }
+                // Compare against what is left before converting: a hostile length (up to 2^64) would
+                // trap in Int(length) or overflow start + length.
+                guard let (length, start) = decodeVarint(data, at: afterKey),
+                      length <= UInt64(data.endIndex - start) else { throw ProtoError.truncated }
                 let end = start + Int(length)
-                guard end <= data.endIndex else { throw ProtoError.truncated }
                 blobs[field, default: []].append(data.subdata(in: start..<end))
                 i = end
-            case 1: i = afterKey + 8
-            case 5: i = afterKey + 4
+            case 1:
+                guard data.endIndex - afterKey >= 8 else { throw ProtoError.truncated }
+                i = afterKey + 8
+            case 5:
+                guard data.endIndex - afterKey >= 4 else { throw ProtoError.truncated }
+                i = afterKey + 4
             default: throw ProtoError.unsupportedWireType
             }
         }
