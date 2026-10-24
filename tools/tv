@@ -18,8 +18,9 @@ if [[ "${1:-}" == "install" ]]; then
   remote="/tmp/$(basename "$apk")"
   scp -q "$apk" "$GINEBRA:$remote"
   args=("${@:1:$#-1}")
-  ssh_g "adb -s $TV_HOST ${args[*]} $remote; rm -f $remote"
-  exit
+  # adb's own exit status, not rm's: a failed install must fail here too.
+  ssh_g "adb -s $TV_HOST $(printf '%q ' "${args[@]}") $(printf '%q' "$remote"); s=\$?; rm -f $(printf '%q' "$remote"); exit \$s"
+  exit $?
 fi
 
 ssh_g "adb -s $TV_HOST $(printf '%q ' "$@")"

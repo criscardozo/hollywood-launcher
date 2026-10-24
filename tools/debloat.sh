@@ -6,8 +6,31 @@
 #   tools/debloat.sh restore debloat/hollywood.txt
 #
 # apply records each package's state before touching it, in debloat/state/<list>.state, and never
-# overwrites a recorded state: restore always goes back to how the TV was before the first apply.
+# overwrites a recorded state: restore always goes back to how the TV was before the first apply, for
+# every package it recorded, even one later commented out of the list.
+#
+# apply refuses a list that names a package the TV or our apps depend on (PROTECTED below, the same as
+# the NEVER DISABLE block of hollywood.txt), and refuses phase B (hollywood-launcher.txt) while our
+# launcher is not installed: without it the TV would be left with no Home.
 set -euo pipefail
+
+PROTECTED=(
+  com.tcl.tv com.tcl.tvinput com.tcl.suspension com.tcl.dashboard com.tcl.systemserver
+  com.tcl.providers.config com.tcl.initsetup com.tcl.useragreement com.tcl.factory.view com.tvos
+  com.tcl.autopair com.tcl.globalkeyoverlay com.tcl.inputmethod.international com.tcl.hearaid
+  com.tcl.airplay2 com.realtek.airplay2
+  com.google.android.tv.remote.service
+  com.android.tv.settings com.android.vending com.google.android.gms com.google.android.gsf
+  com.google.android.webview com.android.providers.tv
+)
+LAUNCHER=dev.cardozo.hollywood.launcher
+
+protected() {
+  [[ "$1" == com.realtek.* ]] && return 0
+  local p
+  for p in "${PROTECTED[@]}"; do [[ "$1" == "$p" ]] && return 0; done
+  return 1
+}
 
 cd "$(dirname "$0")/.."
 TV=tools/tv
@@ -35,6 +58,16 @@ case "$cmd" in
     for p in $packages; do printf '%-45s %s\n' "$p" "$(state_of "$p")"; done
     ;;
   apply)
+    bad=()
+    for p in $packages; do protected "$p" && bad+=("$p"); done
+    if (( ${#bad[@]} )); then
+      echo "refusing: $list names protected packages (see NEVER DISABLE in debloat/hollywood.txt): ${bad[*]}" >&2
+      exit 1
+    fi
+    if [[ "$(basename "$list")" == hollywood-launcher.txt ]] && ! grep -qx "$LAUNCHER" <<<"$all"; then
+      echo "refusing: $LAUNCHER is not installed; phase B would leave the TV with no Home" >&2
+      exit 1
+    fi
     mkdir -p "$state_dir"; touch "$state"
     for p in $packages; do
       s=$(state_of "$p")
@@ -49,12 +82,13 @@ case "$cmd" in
     ;;
   restore)
     [[ -f "$state" ]] || { echo "no recorded state in $state; nothing to restore" >&2; exit 1; }
-    for p in $packages; do
-      before=$(awk -v p="$p" '$1 == p { print $2 }' "$state")
+    # From the recorded state, not the list: a package commented out of the list after an apply still
+    # goes back. Read on fd 3: tools/tv runs ssh, which would swallow the rest of the file from stdin.
+    while read -r p before <&3; do
       if [[ "$before" == enabled && "$(state_of "$p")" == disabled ]]; then
         printf '%-45s ' "$p"; $TV shell pm enable --user 0 "$p" | tr -d '\r'
       fi
-    done
+    done 3< "$state"
     ;;
   *) usage ;;
 esac

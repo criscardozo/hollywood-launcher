@@ -6,7 +6,10 @@
 
 Con adb (desde Ginebra) y `pm disable-user`: sin root, sin desinstalar nada. Cada paquete queda
 apagado para el usuario y se vuelve a prender con `pm enable`. `tools/debloat.sh` anota el estado
-de cada paquete antes de tocarlo (`debloat/state/`) y `restore` vuelve exactamente a ese estado.
+de cada paquete antes de tocarlo (`debloat/state/`) y `restore` vuelve exactamente a ese estado, para
+todo lo que anotó (también lo que después se comentó en la lista). `apply` se niega si una lista nombra
+un paquete protegido (el bloque NEVER DISABLE de `hollywood.txt`, repetido en el script) y no aplica la
+fase B mientras el launcher no esté instalado.
 
 La lista sale de la de cleanyourtv para TCL G10 (`examples/tcl-g10-google-tv`), hecha sobre el mismo
 producto y el mismo build que esta tele, ajustada a lo que decidió Cristian el 2026-10-22.
