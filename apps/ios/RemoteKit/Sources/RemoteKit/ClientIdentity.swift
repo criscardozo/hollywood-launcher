@@ -34,15 +34,29 @@ public struct ClientIdentity: Sendable {
         return try ClientIdentity(certificateDER: certificate, privateKeyDER: keyDER)
     }
 
-    /// The identity kept in the Keychain, created the first time. Used by the iPhone app.
+    /// The identity kept in the Keychain, created the first time. Used by the iPhone and Mac apps.
+    ///
+    /// Only a missing item means "first time". Any other Keychain error (locked, denied) throws: replacing
+    /// the identity then would silently unpair us from the TV.
     public static func keychain(account: String = "dev.cardozo.hollywood.remote") throws -> ClientIdentity {
-        if let cert = Keychain.read(account: account, kind: "cert"), let key = Keychain.read(account: account, kind: "key") {
-            return try ClientIdentity(certificateDER: cert, privateKeyDER: key)
-        }
+        if let stored = try storedInKeychain(account: account) { return stored }
         let identity = try generate()
-        try Keychain.write(identity.certificateDER, account: account, kind: "cert")
-        try Keychain.write(identity.privateKeyDER, account: account, kind: "key")
+        try identity.saveToKeychain(account: account)
         return identity
+    }
+
+    /// The identity in the Keychain, or nil when there is none (never created, or forgotten).
+    public static func storedInKeychain(account: String = "dev.cardozo.hollywood.remote") throws -> ClientIdentity? {
+        guard let cert = try Keychain.read(account: account, kind: "cert"),
+              let key = try Keychain.read(account: account, kind: "key") else { return nil }
+        return try ClientIdentity(certificateDER: cert, privateKeyDER: key)
+    }
+
+    /// Keeps this identity in the Keychain, replacing the one there. Pairing calls it only once the TV
+    /// has accepted the identity, so a cancelled or failed re-pair keeps the working one.
+    public func saveToKeychain(account: String = "dev.cardozo.hollywood.remote") throws {
+        try Keychain.write(certificateDER, account: account, kind: "cert")
+        try Keychain.write(privateKeyDER, account: account, kind: "key")
     }
 
     /// Forgets the identity: the TV will ask to pair again.
@@ -66,7 +80,8 @@ public struct ClientIdentity: Sendable {
 
 /// Generic-password items: the key and certificate are just bytes to keep, this device only.
 private enum Keychain {
-    static func read(account: String, kind: String) -> Data? {
+    /// nil only when the item does not exist; other failures throw.
+    static func read(account: String, kind: String) throws -> Data? {
         var result: CFTypeRef?
         let status = SecItemCopyMatching([
             kSecClass as String: kSecClassGenericPassword,
@@ -75,7 +90,15 @@ private enum Keychain {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ] as CFDictionary, &result)
-        return status == errSecSuccess ? result as? Data : nil
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data else { throw RemoteError.identity("el Llavero devolvió algo que no son datos") }
+            return data
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw RemoteError.identity("no se pudo leer el Llavero (\(status))")
+        }
     }
 
     static func write(_ data: Data, account: String, kind: String) throws {
