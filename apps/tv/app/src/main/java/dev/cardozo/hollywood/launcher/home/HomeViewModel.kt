@@ -27,7 +27,8 @@ import kotlinx.coroutines.launch
 sealed interface JellyfinUi {
     data object NotConnected : JellyfinUi
     data object Loading : JellyfinUi
-    data class Ready(val home: JellyfinHome) : JellyfinUi
+    /** [stale]: the server did not answer, this is the last home that loaded (kept in memory or on disk). */
+    data class Ready(val home: JellyfinHome, val stale: Boolean = false) : JellyfinUi
     data class Failed(val reason: String) : JellyfinUi
 }
 
@@ -125,14 +126,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Home retries this every couple of minutes, while it is on screen, until the server answers again. */
+    fun retryJellyfin() = refreshJellyfin()
+
     private fun refreshJellyfin() {
         viewModelScope.launch {
-            if (_jellyfin.value !is JellyfinUi.Ready) _jellyfin.value = JellyfinUi.Loading
+            // First load (e.g. after the TV restarts): show the last home from disk at once, then the fresh one.
+            if (_jellyfin.value !is JellyfinUi.Ready) {
+                _jellyfin.value = app.jellyfin.cachedHome()?.let { JellyfinUi.Ready(it) } ?: JellyfinUi.Loading
+            }
             _jellyfin.value = try {
                 app.jellyfin.loadHome()?.let { JellyfinUi.Ready(it) } ?: JellyfinUi.NotConnected
             } catch (e: Exception) {
                 Log.w(TAG, "Jellyfin home failed", e)
-                JellyfinUi.Failed(e.message ?: e.javaClass.simpleName)
+                // Keep showing what there was rather than emptying Home while the server is off.
+                val last = (_jellyfin.value as? JellyfinUi.Ready)?.home ?: app.jellyfin.cachedHome()
+                if (last != null) JellyfinUi.Ready(last, stale = true) else JellyfinUi.Failed(e.message ?: e.javaClass.simpleName)
             }
             if (_wallpaper.value == null) {
                 _wallpaper.value = (_jellyfin.value as? JellyfinUi.Ready)?.home?.wallpapers?.firstOrNull()

@@ -1,6 +1,7 @@
 package dev.cardozo.hollywood.launcher.content
 
 import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 
 /** Where a card comes from: it decides the hero badge and what OK does. */
 enum class Source(val label: String, val color: Color, val packageName: String?) {
@@ -19,6 +20,7 @@ enum class Source(val label: String, val color: Color, val packageName: String?)
 }
 
 /** A card on the home screen, already resolved to image URLs, whatever its source. */
+@Serializable
 data class MediaItem(
     val id: String,
     val source: Source,

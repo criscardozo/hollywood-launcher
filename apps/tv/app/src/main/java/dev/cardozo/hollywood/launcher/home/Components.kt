@@ -246,8 +246,16 @@ fun ActionCard(
 
 /** Top right: the weather (once a place is set on the settings page) and the time. Nothing to focus. */
 @Composable
-fun TopBar(weather: Weather?, modifier: Modifier = Modifier) {
+fun TopBar(weather: Weather?, notice: String?, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        // A server that does not answer (Ginebra off): said once, quietly, next to the time.
+        if (notice != null) {
+            Text(
+                "⚠  $notice", fontSize = 11.sp, color = Dim,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            )
+        }
         if (weather != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(weather.symbol, fontSize = 17.sp)

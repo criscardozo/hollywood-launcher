@@ -64,6 +64,20 @@ cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la t
 que muestra tiene una barra que se llena. El foco no se mueve: OK abre lo que elegiste y cualquier
 tecla vuelve todo a su lugar.
 
+## Si Ginebra no responde
+
+Jellyfin y Seerr viven en Ginebra. Si está apagado, el launcher no se vacía:
+
+- **Home** muestra lo último que cargó (guardado también en disco, así sobrevive a un reinicio de la
+  tele; las imágenes salen de la caché de Coil) y avisa arriba «⚠ Ginebra no responde · mostrando lo
+  último». Reintenta cada 2 minutos mientras Home está en pantalla y vuelve solo cuando responde.
+- Al arrancar, Home muestra lo guardado enseguida y lo reemplaza cuando Jellyfin contesta.
+- **Salvapantallas:** las últimas películas que mostró, con las imágenes que ya tenía en caché; las que
+  no cargan se saltean.
+- Siguen andando YouTube, el clima, las apps, las entradas y los controles. No anda reproducir desde
+  Jellyfin, el detalle completo (queda el de la tarjeta), ni https://hollywood.merli.store (el proxy está
+  en Ginebra: usar http://192.168.0.4:8765).
+
 ## Detalle de películas y series
 
 OK en una película o serie (Jellyfin o fijados) abre su página, como la de Jellyfin (diseño A de

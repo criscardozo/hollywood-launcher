@@ -9,6 +9,7 @@ import dev.cardozo.hollywood.launcher.details.Details
 import dev.cardozo.hollywood.launcher.details.Person
 import dev.cardozo.hollywood.launcher.details.Season
 import dev.cardozo.hollywood.launcher.details.trailerAction
+import dev.cardozo.hollywood.launcher.net.Http
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.QuickConnectDto
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import java.io.File
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -51,15 +53,19 @@ sealed interface QuickConnectState {
 }
 
 /** One film of the screensaver: its backdrop full screen, the poster and the text over it. */
+@Serializable
 data class ScreensaverSlide(val title: String, val meta: String, val overview: String, val backdropUrl: String, val posterUrl: String)
 
-/** What the home screen shows from Jellyfin. */
+/** What the home screen shows from Jellyfin. Kept on disk too, to show while the server does not answer. */
+@Serializable
 data class JellyfinHome(
     /** In progress first, then next up episodes. */
     val continueWatching: List<MediaItem>,
     val recentlyAdded: List<MediaItem>,
     /** Backdrops from the library, used as the wallpaper. */
     val wallpapers: List<String>,
+    /** The server's own name («Ginebra»), for the notice when it does not answer. */
+    val serverName: String? = null,
 )
 
 private const val TAG = "Jellyfin"
@@ -67,6 +73,11 @@ private const val TICKS_PER_MS = 10_000L
 private val CARD_FIELDS = listOf(ItemFields.OVERVIEW, ItemFields.GENRES)
 
 class JellyfinRepository(context: Context, private val store: JellyfinSessionStore) {
+
+    // The last good answers, on disk: when the server is off (Ginebra shut down), Home and the screensaver
+    // show these instead of emptying. The images themselves come from Coil's disk cache.
+    private val homeCache = File(context.filesDir, "jellyfin-home.json")
+    private val slidesCache = File(context.filesDir, "screensaver-slides.json")
 
     private val jellyfin = createJellyfin {
         clientInfo = ClientInfo(name = "Hollywood", version = "0.1.0")
@@ -221,28 +232,50 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
 
         val seen = resume.map { it.seriesId ?: it.id }.toMutableSet()
         val upNext = nextUp.filter { seen.add(it.seriesId ?: it.id) }
+        val server = serverName ?: runCatching { api.systemApi.getPublicSystemInfo().content.serverName }.getOrNull()
+            .also { serverName = it }
         JellyfinHome(
             continueWatching = (resume + upNext).map { api.toMediaItem(it) },
             recentlyAdded = latest.map { api.toMediaItem(it) },
             wallpapers = api.randomBackdrops(userId, 20),
-        )
+            serverName = server,
+        ).also { save(homeCache, it) }
+    }
+
+    /** Home as it was last loaded, if it ever was. */
+    suspend fun cachedHome(): JellyfinHome? = read(homeCache)
+
+    private suspend inline fun <reified T> save(file: File, value: T) = withContext(Dispatchers.IO) {
+        runCatching { file.writeText(Http.json.encodeToString(value)) }
+            .onFailure { Log.w(TAG, "Could not write ${file.name}", it) }
+    }
+
+    private suspend inline fun <reified T> read(file: File): T? = withContext(Dispatchers.IO) {
+        if (!file.exists()) return@withContext null
+        runCatching { Http.json.decodeFromString<T>(file.readText()) }.getOrNull()
     }
 
     /** Random films with a backdrop, a poster and an overview, for the screensaver. Empty when not connected. */
     suspend fun screensaverSlides(limit: Int = 40): List<ScreensaverSlide> = withContext(Dispatchers.IO) {
         val session = store.session.first() ?: return@withContext emptyList()
         val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
-        api.libraryApi.getItems(
-            GetItemsRequest(
-                userId = UUID.fromString(session.userId),
-                recursive = true,
-                includeItemTypes = listOf(BaseItemKind.MOVIE),
-                imageTypes = listOf(ImageType.BACKDROP),
-                fields = CARD_FIELDS,
-                sortBy = listOf(ItemSortBy.RANDOM),
-                limit = limit,
-            ),
-        ).content.items.mapNotNull { item ->
+        val items = try {
+            api.libraryApi.getItems(
+                GetItemsRequest(
+                    userId = UUID.fromString(session.userId),
+                    recursive = true,
+                    includeItemTypes = listOf(BaseItemKind.MOVIE),
+                    imageTypes = listOf(ImageType.BACKDROP),
+                    fields = CARD_FIELDS,
+                    sortBy = listOf(ItemSortBy.RANDOM),
+                    limit = limit,
+                ),
+            ).content.items
+        } catch (e: Exception) {
+            Log.i(TAG, "Screensaver from the cache: the server did not answer", e)
+            return@withContext read<List<ScreensaverSlide>>(slidesCache).orEmpty().shuffled()
+        }
+        items.mapNotNull { item ->
             val overview = item.overview?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val backdrop = api.backdropUrl(item) ?: return@mapNotNull null
             val poster = api.posterUrl(item) ?: return@mapNotNull null
@@ -253,14 +286,19 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
                 item.communityRating?.let { "★ ${formatScore(it)}" },
             ).joinToString(" · ")
             ScreensaverSlide(item.name.orEmpty(), meta, overview, backdrop, poster)
-        }
+        }.also { if (it.isNotEmpty()) save(slidesCache, it) }
     }
 
     /** Random backdrops from the library, for the wallpaper and the screensaver. Empty when not connected. */
     suspend fun wallpapers(limit: Int = 30): List<String> = withContext(Dispatchers.IO) {
         val session = store.session.first() ?: return@withContext emptyList()
         val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
-        api.randomBackdrops(UUID.fromString(session.userId), limit)
+        try {
+            api.randomBackdrops(UUID.fromString(session.userId), limit)
+        } catch (e: Exception) {
+            Log.i(TAG, "Wallpapers from the cache: the server did not answer", e)
+            cachedHome()?.wallpapers.orEmpty()
+        }
     }
 }
 

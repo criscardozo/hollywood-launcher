@@ -95,6 +95,9 @@ private val Edge = 48.dp
 
 /** With no key pressed for this long, the hero starts walking the focused row on its own. */
 private const val IDLE_BEFORE_ROTATING_MS = 10_000L
+/** How often Home asks Jellyfin's server again while it does not answer. */
+private const val JELLYFIN_RETRY_MS = 2 * 60_000L
+
 /** How long the idle hero stays on each item. */
 const val HERO_ROTATE_MS = 8_000L
 
@@ -142,6 +145,19 @@ fun HomeScreen(
     var showing by remember { mutableStateOf<MediaItem?>(null) }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val onScreen = active && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    // Jellyfin's server (Ginebra) off: say so, keep the last home on screen, and try again every two minutes.
+    val jellyfinOffline = jellyfin is JellyfinUi.Failed || (jellyfin as? JellyfinUi.Ready)?.stale == true
+    val jellyfinNotice = when {
+        jellyfin is JellyfinUi.Failed -> "Jellyfin no responde"
+        jellyfinOffline -> "${(jellyfin as JellyfinUi.Ready).home.serverName ?: "Jellyfin"} no responde · mostrando lo último"
+        else -> null
+    }
+    LaunchedEffect(onScreen, jellyfinOffline) {
+        while (onScreen && jellyfinOffline) {
+            delay(JELLYFIN_RETRY_MS)
+            viewModel.retryJellyfin()
+        }
+    }
     // The weather refreshes itself (at most every half hour) only while Home is on screen.
     LaunchedEffect(onScreen) {
         while (onScreen) {
@@ -325,7 +341,7 @@ fun HomeScreen(
             }
         }
 
-        TopBar(weather, Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 36.dp))
+        TopBar(weather, jellyfinNotice, Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 36.dp))
     }
 }
 

@@ -17,6 +17,7 @@ import android.widget.TextClock
 import android.widget.TextView
 import coil3.SingletonImageLoader
 import coil3.asDrawable
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import dev.cardozo.hollywood.launcher.jellyfin.ScreensaverSlide
 import dev.cardozo.hollywood.launcher.launcherApp
@@ -33,6 +34,8 @@ private const val SLIDE_EVERY_MS = 20_000L
 private const val FADE_MS = 1_500L
 /** Without films to show, plain backdrops at the old, slower pace. */
 private const val BACKDROP_EVERY_MS = 45_000L
+/** The pause before trying the next film when one does not load. */
+private const val SKIP_MS = 300L
 /** How far the slow zoom goes over one slide. */
 private const val ZOOM = 1.08f
 
@@ -146,16 +149,22 @@ class ClockDream : DreamService() {
         var slides = films()
         if (slides.isEmpty()) return backdropsOnly()
         var i = 0
+        var failures = 0
         while (scope.isActive) {
             // Each round through the list asks for a new random batch, so it does not repeat in the same order.
             if (i > 0 && i % slides.size == 0) slides = films().ifEmpty { slides }
             val slide = slides[i % slides.size]
             val backdrop = load(slide.backdropUrl, 1920, 1080)
-            if (backdrop != null) {
-                crossfade(backdrop)
-                showInfo(slide, load(slide.posterUrl, 400, 600))
-            }
             i++
+            // A film whose image does not load (the server is off and it was never cached) is skipped at once.
+            if (backdrop == null) {
+                // A whole round with nothing loading: wait the usual time instead of spinning.
+                delay(if (++failures % slides.size == 0) SLIDE_EVERY_MS else SKIP_MS)
+                continue
+            }
+            failures = 0
+            crossfade(backdrop)
+            showInfo(slide, load(slide.posterUrl, 400, 600))
             delay(SLIDE_EVERY_MS)
         }
     }
@@ -175,9 +184,13 @@ class ClockDream : DreamService() {
         }
     }
 
+    /** From Coil's disk cache when it is there (so it works with the server off), else from the network. */
     private suspend fun load(url: String, width: Int, height: Int): Drawable? {
+        val loader = SingletonImageLoader.get(this)
+        val cached = ImageRequest.Builder(this).data(url).size(width, height).networkCachePolicy(CachePolicy.DISABLED).build()
+        loader.execute(cached).image?.let { return it.asDrawable(resources) }
         val request = ImageRequest.Builder(this).data(url).size(width, height).build()
-        return SingletonImageLoader.get(this).execute(request).image?.asDrawable(resources)
+        return loader.execute(request).image?.asDrawable(resources)
     }
 
     /**
