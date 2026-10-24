@@ -17,8 +17,13 @@ public struct RemoteState: Sendable, Equatable {
 
 /// A remote-control session on port 6466, once the client certificate is paired. Answers the TV's
 /// handshake and pings by itself; the TV drops clients that stop answering pings.
+///
+/// It also notices when the TV goes quiet: the TV pings about every 5 s, so [silenceLimit] without any
+/// message means the connection is dead (the Mac slept, the network changed) even though no error ever
+/// arrives. The session then closes and [updates] ends, as when the TV hangs up.
 public final class RemoteSession: @unchecked Sendable {
     public static let port: UInt16 = 6466
+    public static let silenceLimit: Duration = .seconds(15)
 
     private let channel: Channel
     private let features: RemoteFeatures
@@ -28,6 +33,8 @@ public final class RemoteSession: @unchecked Sendable {
     private var imeCounter = 0
     private var fieldCounter = 0
     private var reader: Task<Void, Never>?
+    private var watchdog: Task<Void, Never>?
+    private var lastHeard = ContinuousClock.now
     private let stateContinuation: AsyncStream<RemoteState>.Continuation
 
     /// Every change of [RemoteState], starting with the first one after connecting.
@@ -45,20 +52,52 @@ public final class RemoteSession: @unchecked Sendable {
     }
 
     /// Opens the connection and waits until the TV is ready for commands. Throws when the TV refuses
-    /// the certificate: pair first.
+    /// the certificate: pair first. Cancelling the calling task closes the session and throws
+    /// CancellationError.
     public func connect(timeout: TimeInterval = 8) async throws {
+        do {
+            try await withTaskCancellationHandler {
+                try await start(timeout: timeout)
+            } onCancel: {
+                close()
+            }
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw error
+        }
+    }
+
+    private func start(timeout: TimeInterval) async throws {
         try await channel.open()
         let ready = AsyncStream<Void>.makeStream()
-        reader = Task { [weak self] in
+        lock.withLock { lastHeard = .now }
+        let reader = Task { [weak self] in
             guard let self else { return }
             do {
                 for try await data in channel.messages {
+                    lock.withLock { lastHeard = .now }
                     if handle(data) { ready.continuation.yield() }
                 }
             } catch {}
+            lock.withLock { watchdog }?.cancel()
             update { $0.connected = false }
             ready.continuation.finish()
             stateContinuation.finish()
+        }
+        let watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self else { return }
+                let silence = lock.withLock { ContinuousClock.now - lastHeard }
+                if silence > Self.silenceLimit {
+                    channel.close()
+                    return
+                }
+            }
+        }
+        lock.withLock {
+            self.reader = reader
+            self.watchdog = watchdog
         }
         let started = await withTaskGroup(of: Bool.self) { group in
             group.addTask { for await _ in ready.stream { return true }; return false }
@@ -92,7 +131,9 @@ public final class RemoteSession: @unchecked Sendable {
     public var current: RemoteState { lock.withLock { state } }
 
     public func close() {
+        let (reader, watchdog) = lock.withLock { (reader, watchdog) }
         reader?.cancel()
+        watchdog?.cancel()
         channel.close()
     }
 
