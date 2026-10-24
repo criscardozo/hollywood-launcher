@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let popover = NSPopover()
     private var hotKey: HotKey?
     private var keyMonitor: Any?
+    private var wakeObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // A MenuBarExtra cannot be opened from code, so the global shortcut needs a status item of our own.
@@ -44,6 +45,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         hotKey = HotKey(keyCode: UInt32(kVK_ANSI_H), modifiers: UInt32(cmdKey | optionKey)) { [weak self] in
             self?.toggle()
+        }
+        // After sleep the TV has long dropped us, but the socket only finds out at the next write (or after
+        // RemoteSession.silenceLimit). Start over right away so the panel is ready when it is opened.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.model.disconnect()
+                Task { await self.model.connectIfNeeded() }
+            }
         }
         // `-open YES` (with `-demo YES` for made-up state): the panel open at launch.
         // The status item's button is not on screen yet at launch: show the popover a moment later.
