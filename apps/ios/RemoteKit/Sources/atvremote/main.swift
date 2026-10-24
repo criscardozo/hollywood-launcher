@@ -11,7 +11,7 @@ import RemoteKit
 //   atvremote watch <host>             print what the TV reports (app, volume, power) for 30 s
 //
 // The identity is a PEM certificate and key, .local/atvremote.crt and .local/atvremote.key by default
-// (ATV_CERT, ATV_KEY). Create them once with openssl (see apps/ios/README.md).
+// (ATV_CERT, ATV_KEY). Create them once with openssl (see docs/ios.md).
 
 let args = CommandLine.arguments.dropFirst()
 guard let command = args.first, args.count >= 2 else {

@@ -66,9 +66,13 @@ Jellyfin en la tele"), widget y Live Activity con lo que se está reproduciendo.
 - Probado contra el emulador de Google TV: TLS con el certificado raro y **emparejamiento completo**
   (el servicio acepta el secreto).
 - El puerto de comandos (6466) del emulador no acepta conexiones ni siquiera a `androidtvremote2`
-  después de emparejar: es una limitación del emulador. Teclas, apps, texto y estado (app en frente,
-  volumen, encendido) se prueban con la tele.
+  después de emparejar: es una limitación del emulador.
+- **Con la tele real (2026-10-23), desde la app de Mac:** emparejamiento y control por el puerto 6466
+  funcionan (lo probó Cristian). Remote v2 queda confirmado en la tele; la app del iPhone usa el mismo
+  modelo y RemoteKit, falta probarla en el teléfono.
 - La app compila sin advertencias y corre en el simulador; encuentra a la tele real por Bonjour.
+- Si la tele deja de hablar (la Mac se durmió, cambió la red), la app lo nota a los 15 s sin pings y
+  muestra «Se cortó la conexión»; la Mac además reconecta sola al despertarse.
 - `-demo YES` como argumento de arranque muestra el control conectado con datos inventados.
 - Abrir apps usa `market://launch?id=<paquete>` (YouTube, su URL): falta confirmarlo en la tele.
 
@@ -81,8 +85,8 @@ datos con un widget); se verifica cuando se llegue a los extras. Nada de esto pa
 ## Orden
 
 1. ~~Esqueleto y pantallas.~~
-2. ~~Remote v2: descubrimiento y emparejamiento~~ (probado en el emulador); teclas y estado (falta la tele). ← acá
-3. Abrir apps y teclado: falta confirmar en la tele.
+2. ~~Remote v2: descubrimiento, emparejamiento y teclas~~ (probados en la tele con la app de Mac, 2026-10-23).
+3. Abrir apps y teclado: falta confirmar en la tele. ← acá
 4. API del launcher: apps con íconos, fijados y Jellyfin desde el celular.
 5. Extras de iOS: Centro de Control, atajos de Siri, widget.
 
