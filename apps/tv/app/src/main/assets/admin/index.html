@@ -160,7 +160,8 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Everything from the server, TMDB or a place search goes through esc() before it reaches innerHTML.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const SERVICES = { PRIME: "Prime Video", DISNEY: "Disney+", MAX: "Max" };
 let picked = null;
 
@@ -180,7 +181,7 @@ async function saveToken() {
 async function load() {
   const s = await api("/api/status");
   $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-  const pill = (name, on, text) => `<div class="pill"><b>${name}</b><span class="${on ? "on" : "off"}">${text}</span></div>`;
+  const pill = (name, on, text) => `<div class="pill"><b>${name}</b><span class="${on ? "on" : "off"}">${esc(text)}</span></div>`;
   $("status").innerHTML =
     pill("Jellyfin", s.jellyfinConnected, s.jellyfinConnected ? "conectado" : "sin conectar") +
     pill("YouTube", s.youtubeConnected, s.youtubeConnected ? "conectado" : s.youtubeConfigured ? "sin conectar" : "falta el cliente de Google") +
@@ -295,7 +296,7 @@ async function search() {
     const results = await api("/api/search?q=" + encodeURIComponent($("q").value));
     $("results").innerHTML = results.slice(0, 18).map((r, i) => `
       <div class="result" data-i="${i}" onclick='pick(${i})'>
-        <img src="${r.posterPath ? "https://image.tmdb.org/t/p/w342" + r.posterPath : ""}" alt="">
+        <img src="${r.posterPath ? "https://image.tmdb.org/t/p/w342" + esc(r.posterPath) : ""}" alt="">
         <div>${esc(r.title || r.name)}<br><small>${esc((r.releaseDate || r.firstAirDate || "").slice(0, 4))} · ${r.mediaType === "tv" ? "Serie" : "Película"}</small></div>
       </div>`).join("");
     window.lastResults = results;
@@ -330,12 +331,12 @@ async function loadPins() {
   const pins = await api("/api/pins");
   $("pins").innerHTML = pins.map(p => `
     <div class="pin">
-      <img src="${p.posterPath ? "https://image.tmdb.org/t/p/w154" + p.posterPath : ""}" alt="">
+      <img src="${p.posterPath ? "https://image.tmdb.org/t/p/w154" + esc(p.posterPath) : ""}" alt="">
       <div class="t">${esc(p.title)}<small>${SERVICES[p.source]}${p.year ? " · " + esc(p.year) : ""}${p.link ? " · con link" : " · abre la app"}</small></div>
-      <button class="ghost" onclick="unpin('${p.id}')">Quitar</button>
+      <button class="ghost" onclick="unpin(this.dataset.id)" data-id="${esc(p.id)}">Quitar</button>
     </div>`).join("");
 }
-async function unpin(id) { await api("/api/pins/" + id, { method: "DELETE" }); load(); }
+async function unpin(id) { await api("/api/pins/" + encodeURIComponent(id), { method: "DELETE" }); load(); }
 
 let appNames = {};
 async function loadKeys() {

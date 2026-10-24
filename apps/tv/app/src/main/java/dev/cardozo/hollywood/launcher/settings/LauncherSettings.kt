@@ -34,7 +34,6 @@ data class Settings(
     val youtubeConfigured get() = googleClientId.isNotBlank() && googleClientSecret.isNotBlank()
     val youtubeConnected get() = youtubeConfigured && youtubeRefreshToken.isNotBlank()
     val seerrConfigured get() = seerrUrl.isNotBlank() && seerrApiKey.isNotBlank()
-    val weatherConfigured get() = weatherLatitude != null && weatherLongitude != null
 }
 
 private val Context.dataStore by preferencesDataStore(name = "launcher")
@@ -63,10 +62,13 @@ class LauncherSettings(private val context: Context) {
     /** The code the settings page asks for, shown on the TV. Created once. */
     suspend fun adminToken(): String {
         current().adminToken.takeIf { it.isNotBlank() }?.let { return it }
-        // A CSPRNG, not kotlin.random: the code guards the settings API on the LAN (the server rate-limits guesses).
-        val token = (SecureRandom().nextInt(900_000) + 100_000).toString()
-        context.dataStore.edit { it[Keys.adminToken] = token }
-        return token
+        // Checked and created in one edit: the TV's settings screen and a page request can both ask first,
+        // and two codes would leave the TV showing one while the other is stored.
+        val prefs = context.dataStore.edit {
+            // A CSPRNG, not kotlin.random: the code guards the settings API on the LAN (the server rate-limits guesses).
+            if (it[Keys.adminToken].isNullOrBlank()) it[Keys.adminToken] = (SecureRandom().nextInt(900_000) + 100_000).toString()
+        }
+        return prefs[Keys.adminToken].orEmpty()
     }
 
     suspend fun setGoogleClient(id: String, secret: String) = context.dataStore.edit {
@@ -87,7 +89,8 @@ class LauncherSettings(private val context: Context) {
         it[Keys.seerrApiKey] = apiKey.trim()
     }
 
-    suspend fun setPinsJson(json: String) = context.dataStore.edit { it[Keys.pins] = json }
+    /** Reads, changes and writes the pins in one edit, so two requests at once cannot lose one. */
+    suspend fun updatePinsJson(change: (String) -> String) = context.dataStore.edit { it[Keys.pins] = change(it[Keys.pins] ?: "[]") }
 
     suspend fun setPlayer(player: Player) = context.dataStore.edit { it[Keys.player] = player.name }
 

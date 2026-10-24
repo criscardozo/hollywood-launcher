@@ -32,21 +32,25 @@ private const val TMDB_IMAGES = "https://image.tmdb.org/t/p"
 
 class PinsRepository(private val settings: LauncherSettings) {
 
-    val pins: Flow<List<Pin>> = settings.settings.map { decode(it.pinsJson) }
+    val pins: Flow<List<Pin>> = settings.settings.map { runCatching { decode(it.pinsJson) }.getOrDefault(emptyList()) }
 
-    suspend fun list(): List<Pin> = decode(settings.current().pinsJson)
+    suspend fun list(): List<Pin> = runCatching { decode(settings.current().pinsJson) }.getOrDefault(emptyList())
 
     suspend fun add(pin: Pin): Pin {
-        save(list().filterNot { it.tmdbId == pin.tmdbId && it.source == pin.source } + pin)
+        update { pins -> pins.filterNot { it.tmdbId == pin.tmdbId && it.source == pin.source } + pin }
         return pin
     }
 
-    suspend fun remove(id: String) = save(list().filterNot { it.id == id })
+    suspend fun remove(id: String) = update { pins -> pins.filterNot { it.id == id } }
 
-    private suspend fun save(pins: List<Pin>) = settings.setPinsJson(Http.json.encodeToString(pins))
+    /**
+     * One read-modify-write. Stored pins that no longer decode (say, a service renamed in a later build) make
+     * this fail instead of being replaced by a list holding only the new pin.
+     */
+    private suspend fun update(change: (List<Pin>) -> List<Pin>) =
+        settings.updatePinsJson { json -> Http.json.encodeToString(change(decode(json))) }
 
-    private fun decode(json: String): List<Pin> =
-        runCatching { Http.json.decodeFromString<List<Pin>>(json) }.getOrDefault(emptyList())
+    private fun decode(json: String): List<Pin> = Http.json.decodeFromString<List<Pin>>(json)
 }
 
 fun Pin.toMediaItem(): MediaItem {

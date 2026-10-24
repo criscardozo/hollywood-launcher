@@ -1,6 +1,7 @@
 package dev.cardozo.hollywood.launcher.jellyfin
 
 import android.content.Context
+import android.util.AtomicFile
 import android.util.Log
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
@@ -15,6 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
@@ -78,6 +81,7 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
     // show these instead of emptying. The images themselves come from Coil's disk cache.
     private val homeCache = File(context.filesDir, "jellyfin-home.json")
     private val slidesCache = File(context.filesDir, "screensaver-slides.json")
+    private val cacheLock = Mutex()
 
     private val jellyfin = createJellyfin {
         clientInfo = ClientInfo(name = "Hollywood", version = "0.1.0")
@@ -118,6 +122,7 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
         val token = auth.accessToken
         val userId = auth.user?.id ?: return@withContext "El servidor no devolvió un usuario"
         if (token == null) return@withContext "El servidor no devolvió un usuario"
+        serverName = null
         store.save(JellyfinSession(url, token, userId.toString()))
         null
     }
@@ -164,13 +169,19 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
                 emit(QuickConnectState.Failed("El servidor no devolvió un usuario"))
                 return@flow
             }
+            serverName = null
             store.save(JellyfinSession(baseUrl, token, userId.toString()))
             emit(QuickConnectState.Connected)
             return@flow
         }
     }
 
-    suspend fun disconnect() = store.clear()
+    /** Forgets the server: the session, its name and what was cached from it. */
+    suspend fun disconnect() {
+        store.clear()
+        serverName = null
+        withContext(Dispatchers.IO) { cacheLock.withLock { homeCache.delete(); slidesCache.delete() } }
+    }
 
     /** The details page of a film or a series. An episode opens its series, continuing from that episode. */
     suspend fun details(itemId: String): Details? = withContext(Dispatchers.IO) {
@@ -245,14 +256,28 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
     /** Home as it was last loaded, if it ever was. */
     suspend fun cachedHome(): JellyfinHome? = read(homeCache)
 
+    // AtomicFile: the low-memory killer often stops the launcher while a streaming app runs, and a write cut
+    // in half would lose the cache exactly when the server is off. The lock keeps two refreshes from
+    // writing the same file at once.
     private suspend inline fun <reified T> save(file: File, value: T) = withContext(Dispatchers.IO) {
-        runCatching { file.writeText(Http.json.encodeToString(value)) }
-            .onFailure { Log.w(TAG, "Could not write ${file.name}", it) }
+        cacheLock.withLock {
+            val atomic = AtomicFile(file)
+            val out = atomic.startWrite()
+            runCatching {
+                out.write(Http.json.encodeToString(value).toByteArray())
+                atomic.finishWrite(out)
+            }.onFailure {
+                atomic.failWrite(out)
+                Log.w(TAG, "Could not write ${file.name}", it)
+            }
+        }
     }
 
     private suspend inline fun <reified T> read(file: File): T? = withContext(Dispatchers.IO) {
-        if (!file.exists()) return@withContext null
-        runCatching { Http.json.decodeFromString<T>(file.readText()) }.getOrNull()
+        cacheLock.withLock {
+            if (!file.exists()) return@withLock null
+            runCatching { Http.json.decodeFromString<T>(AtomicFile(file).readFully().decodeToString()) }.getOrNull()
+        }
     }
 
     /** Random films with a backdrop, a poster and an overview, for the screensaver. Empty when not connected. */

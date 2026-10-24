@@ -29,13 +29,15 @@ class RemoteKeys(private val context: Context) {
 
     suspend fun list(): List<KeyMapping> = decode(context.keysStore.data.first()[MAPPING])
 
-    suspend fun set(keyCode: Int, packageName: String) {
-        val updated = list().filterNot { it.keyCode == keyCode } + KeyMapping(keyCode, keyName(keyCode), packageName)
-        context.keysStore.edit { it[MAPPING] = Http.json.encodeToString(updated) }
-    }
+    suspend fun set(keyCode: Int, packageName: String) =
+        update { it.filterNot { k -> k.keyCode == keyCode } + KeyMapping(keyCode, keyName(keyCode), packageName) }
 
-    suspend fun remove(keyCode: Int) {
-        context.keysStore.edit { it[MAPPING] = Http.json.encodeToString(list().filterNot { k -> k.keyCode == keyCode }) }
+    suspend fun remove(keyCode: Int) = update { it.filterNot { k -> k.keyCode == keyCode } }
+
+    /** One read-modify-write; a stored mapping that no longer decodes makes this fail rather than be replaced. */
+    private suspend fun update(change: (List<KeyMapping>) -> List<KeyMapping>) = context.keysStore.edit { prefs ->
+        val current = prefs[MAPPING]?.let { Http.json.decodeFromString<List<KeyMapping>>(it) }.orEmpty()
+        prefs[MAPPING] = Http.json.encodeToString(change(current))
     }
 
     fun open(packageName: String) {

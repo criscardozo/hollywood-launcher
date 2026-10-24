@@ -18,10 +18,12 @@ import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
 import dev.cardozo.hollywood.launcher.youtube.YouTubeSignIn
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -31,12 +33,14 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicInteger
 
 const val ADMIN_PORT = 8765
 private const val TAG = "AdminServer"
 private const val MAX_FAILURES = 10
 private const val LOCKOUT_MS = 5 * 60_000L
+private const val MAX_BODY_BYTES = 64 * 1024
+/** TMDB's kinds, the only values that may go into a Seerr path. */
+private val MEDIA_TYPES = setOf("movie", "tv")
 
 @Serializable private data class GoogleBody(val clientId: String, val clientSecret: String)
 @Serializable private data class SeerrBody(val url: String, val apiKey: String)
@@ -82,12 +86,17 @@ class AdminServer(
     private val json: Json = Http.json
 
     // Google's device flow outlives the request that starts it: it polls until the code is approved.
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> Log.w(TAG, "Settings task failed", e) },
+    )
     private var youtubeJob: Job? = null
     @Volatile private var youtubeConnect = YouTubeConnect("idle")
 
-    // Six digits are guessable only without a limit: 10 wrong codes lock the API for 5 minutes.
-    private val failures = AtomicInteger(0)
+    // Six digits are guessable only without a limit: 10 wrong codes within 5 minutes lock the API for 5
+    // minutes. A right code does not reset the count (the page polls, which would let guesses through), and
+    // only requests that carry a code count: a browser cannot send that header cross-origin, so a web page
+    // (an <img> pointing here) cannot lock the user out.
+    private val failures = ArrayDeque<Long>()
     @Volatile private var lockedUntilMs = 0L
 
     fun startQuietly() {
@@ -100,16 +109,41 @@ class AdminServer(
 
     override fun serve(session: IHTTPSession): Response = try {
         route(session)
+    } catch (e: IllegalArgumentException) {
+        // require(...) on what the request sent: a bad request, not a server error.
+        reply(Response.Status.BAD_REQUEST, Error(e.message ?: "Pedido inválido"))
     } catch (e: Exception) {
         Log.w(TAG, "${session.method} ${session.uri} failed", e)
         reply(Response.Status.INTERNAL_ERROR, Error(e.message ?: e.javaClass.simpleName))
+    }
+
+    /** Counts a wrong code, and locks the API after too many in the window. */
+    @Synchronized
+    private fun wrongCode() {
+        val now = System.currentTimeMillis()
+        failures.addLast(now)
+        while (failures.isNotEmpty() && now - failures.first() > LOCKOUT_MS) failures.removeFirst()
+        if (failures.size >= MAX_FAILURES) {
+            failures.clear()
+            lockedUntilMs = now + LOCKOUT_MS
+            Log.w(TAG, "Settings API locked after $MAX_FAILURES wrong codes")
+        }
     }
 
     private fun route(session: IHTTPSession): Response {
         val uri = session.uri
         if (uri == "/" || uri == "/index.html") {
             val html = context.assets.open("admin/index.html").bufferedReader().use { it.readText() }
-            return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html)
+            return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html).apply {
+                // Only this page's own requests and TMDB's posters; never inside someone else's frame.
+                addHeader(
+                    "Content-Security-Policy",
+                    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; " +
+                        "img-src 'self' https://image.tmdb.org data:; connect-src 'self'; frame-ancestors 'none'",
+                )
+                addHeader("X-Frame-Options", "DENY")
+                addHeader("Referrer-Policy", "no-referrer")
+            }
         }
         if (!uri.startsWith("/api/")) return reply(Response.Status.NOT_FOUND, Error("No existe"))
 
@@ -118,15 +152,11 @@ class AdminServer(
         }
         val token = runBlocking { settings.adminToken() }
         val given = session.headers["x-token"].orEmpty()
+        if (given.isEmpty()) return reply(Response.Status.UNAUTHORIZED, Error("Falta el código"))
         if (!MessageDigest.isEqual(given.toByteArray(), token.toByteArray())) {
-            if (failures.incrementAndGet() >= MAX_FAILURES) {
-                failures.set(0)
-                lockedUntilMs = System.currentTimeMillis() + LOCKOUT_MS
-                Log.w(TAG, "Settings API locked after $MAX_FAILURES wrong codes")
-            }
+            wrongCode()
             return reply(Response.Status.UNAUTHORIZED, Error("Código incorrecto"))
         }
-        failures.set(0)
 
         val method = session.method
         return runBlocking {
@@ -141,8 +171,9 @@ class AdminServer(
 
                 uri == "/api/seerr" && method == Method.POST -> {
                     val body = json.decodeFromString<SeerrBody>(body(session))
+                    // Tried first, saved only if it works: a wrong key must not replace a working one.
+                    seerr.test(body.url, body.apiKey)
                     settings.setSeerr(body.url, body.apiKey)
-                    seerr.search("test") // fails loudly when the URL or key is wrong
                     reply(status())
                 }
 
@@ -183,6 +214,7 @@ class AdminServer(
                 uri == "/api/services" && method == Method.GET -> {
                     val id = session.parms["tmdbId"]?.toIntOrNull() ?: return@runBlocking reply(Response.Status.BAD_REQUEST, Error("Falta tmdbId"))
                     val type = session.parms["mediaType"] ?: "movie"
+                    require(type in MEDIA_TYPES) { "mediaType: movie o tv" }
                     reply(seerr.services(id, type).map { it.name })
                 }
 
@@ -191,6 +223,7 @@ class AdminServer(
                 uri == "/api/pins" && method == Method.POST -> {
                     val pin = json.decodeFromString<Pin>(body(session))
                     require(pin.source in Source.pinnable) { "Solo Prime Video, Disney+ o Max" }
+                    require(pin.mediaType in MEDIA_TYPES) { "mediaType: movie o tv" }
                     reply(pins.add(pin))
                 }
 
@@ -238,7 +271,13 @@ class AdminServer(
         youtubeConnect = YouTubeConnect("idle")
         val first = CompletableDeferred<Unit>()
         youtubeJob = scope.launch {
-            youtubeAuth.signIn().collect { step ->
+            youtubeAuth.signIn()
+                // Anything unexpected ends this sign-in, never the launcher's process.
+                .catch { e ->
+                    Log.w(TAG, "YouTube sign-in from the page failed", e)
+                    emit(YouTubeSignIn.Failed("No se pudo hablar con Google"))
+                }
+                .collect { step ->
                 youtubeConnect = when (step) {
                     is YouTubeSignIn.WaitingForCode -> YouTubeConnect("waiting", url = step.url, code = step.code)
                     YouTubeSignIn.Connected -> YouTubeConnect("connected")
@@ -282,6 +321,8 @@ class AdminServer(
      */
     private fun body(session: IHTTPSession): String {
         val length = session.headers["content-length"]?.toIntOrNull() ?: return ""
+        // Settings are a few hundred bytes; a huge Content-Length would otherwise allocate it all.
+        require(length in 0..MAX_BODY_BYTES) { "Pedido demasiado grande" }
         val bytes = ByteArray(length)
         var read = 0
         while (read < length) {

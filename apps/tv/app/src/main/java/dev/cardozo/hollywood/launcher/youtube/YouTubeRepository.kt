@@ -9,13 +9,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -51,6 +54,9 @@ private data class FeedEntry(
  */
 class YouTubeRepository(private val auth: YouTubeAuth, private val settings: LauncherSettings) {
 
+    private val loading = Mutex()
+    /** The refresh token the in-memory lists were loaded with. */
+    private var account: String? = null
     private var channelsAtMs = 0L
     private var videos: List<MediaItem> = emptyList()
     private var videosAtMs = 0L
@@ -61,19 +67,43 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
      * with the saved channels; only durations and views are missing then.
      */
     suspend fun latest(force: Boolean = false): List<MediaItem>? = withContext(Dispatchers.IO) {
+        // Home (twice at start) and the settings page can ask at once: one load, the others reuse it.
+        loading.withLock { load(force) }
+    }
+
+    private suspend fun load(force: Boolean): List<MediaItem>? {
+        val s = settings.current()
+        // Another account signed in since the last load: what is in memory belongs to the old one.
+        if (s.youtubeRefreshToken != account) {
+            account = s.youtubeRefreshToken
+            channelsAtMs = 0L
+            videos = emptyList()
+            videosAtMs = 0L
+        }
         val token = runCatching { auth.accessToken() }.getOrNull()
         var channels = settings.current().youtubeChannels
-        if (token == null && channels.isEmpty()) return@withContext null
+        if (token == null && channels.isEmpty()) return null
         val now = System.currentTimeMillis()
-        if (!force && videos.isNotEmpty() && now - videosAtMs < VIDEOS_TTL_MS) return@withContext videos
+        if (!force && videos.isNotEmpty() && now - videosAtMs < VIDEOS_TTL_MS) return videos
 
         if (token != null && (channels.isEmpty() || now - channelsAtMs > SUBSCRIPTIONS_TTL_MS)) {
-            channels = subscriptions(token)
-            settings.setYoutubeChannels(channels)
-            channelsAtMs = now
+            // A quota error or an outage here must not cost the row: the saved channels still work over RSS.
+            runCatching { subscriptions(token) }
+                .onSuccess {
+                    channels = it
+                    settings.setYoutubeChannels(it)
+                    channelsAtMs = now
+                }
+                .onFailure { if (channels.isEmpty()) throw it }
         }
         val cutoff = Instant.now().minus(Duration.ofDays(MAX_AGE_DAYS))
-        val entries = feeds(channels)
+        val fetched = feeds(channels)
+        // Not one feed answered (the internet is down): keep the last good list rather than empty the row.
+        if (channels.isNotEmpty() && fetched.all { it == null }) {
+            if (videos.isNotEmpty()) return videos
+            throw IOException("No se pudo leer ningún canal")
+        }
+        val entries = fetched.filterNotNull().flatten()
             .filter { !it.isShort && it.published.isAfter(cutoff) }
             .sortedByDescending { it.published }
             .take(MAX_VIDEOS)
@@ -86,7 +116,7 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
             entry.toMediaItem(duration, video?.statistics?.viewCount?.toLongOrNull())
         }
         videosAtMs = now
-        videos
+        return videos
     }
 
     private suspend fun subscriptions(token: String): List<String> {
@@ -106,17 +136,18 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
         return ids
     }
 
-    private suspend fun feeds(channelIds: List<String>): List<FeedEntry> = coroutineScope {
+    /** Each channel's entries, or null for a channel whose feed did not load. */
+    private suspend fun feeds(channelIds: List<String>): List<List<FeedEntry>?> = coroutineScope {
         val limit = Semaphore(8)
         channelIds.map { id ->
             async {
                 limit.withPermit {
                     runCatching {
                         parseFeed(Http.get(Request.Builder().url("https://www.youtube.com/feeds/videos.xml?channel_id=$id").build()))
-                    }.getOrDefault(emptyList())
+                    }.getOrNull()
                 }
             }
-        }.awaitAll().flatten()
+        }.awaitAll()
     }
 
     private suspend fun details(token: String, ids: List<String>): Map<String, Video> {

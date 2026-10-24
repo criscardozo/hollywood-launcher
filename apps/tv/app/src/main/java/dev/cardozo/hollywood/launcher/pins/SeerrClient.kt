@@ -25,10 +25,7 @@ data class SearchResult(
     val overview: String? = null,
     val posterPath: String? = null,
     val backdropPath: String? = null,
-) {
-    val displayTitle get() = title ?: name.orEmpty()
-    val year get() = (releaseDate ?: firstAirDate)?.take(4)?.takeIf { it.isNotBlank() }
-}
+)
 
 private const val TMDB_PROFILES = "https://image.tmdb.org/t/p/w185"
 
@@ -88,7 +85,7 @@ class SeerrClient(private val settings: LauncherSettings) {
 
     /** The pinnable services that stream this title in Australia, best guess first. */
     suspend fun services(tmdbId: Int, mediaType: String, region: String = "AU"): List<Source> {
-        val url = endpoint("$mediaType/$tmdbId").newBuilder().addQueryParameter("language", LANGUAGE).build()
+        val url = endpoint(titlePath(mediaType, tmdbId)).newBuilder().addQueryParameter("language", LANGUAGE).build()
         val details = Http.json.decodeFromString<WatchProviders>(get(url.toString()))
         val names = details.watchProviders.firstOrNull { it.iso_3166_1 == region }?.flatrate.orEmpty().map { it.name.lowercase() }
         return names.mapNotNull { name ->
@@ -103,7 +100,7 @@ class SeerrClient(private val settings: LauncherSettings) {
 
     /** The details page of a pinned title: TMDB's metadata, with the pin's own service as the source. */
     suspend fun details(pin: Pin, region: String = "AU"): Details {
-        val url = endpoint("${pin.mediaType}/${pin.tmdbId}").newBuilder().addQueryParameter("language", LANGUAGE).build()
+        val url = endpoint(titlePath(pin.mediaType, pin.tmdbId)).newBuilder().addQueryParameter("language", LANGUAGE).build()
         val d = Http.json.decodeFromString<TitleDetails>(get(url.toString()))
         val item = pin.toMediaItem()
         // Australian classification: per release for films, per country for series.
@@ -128,12 +125,27 @@ class SeerrClient(private val settings: LauncherSettings) {
 
     /** A trailer from TMDB, for a Jellyfin title whose own metadata has none. */
     suspend fun trailer(tmdbId: Int, mediaType: String): String? {
-        val url = endpoint("$mediaType/$tmdbId").newBuilder().addQueryParameter("language", LANGUAGE).build()
+        val url = endpoint(titlePath(mediaType, tmdbId)).newBuilder().addQueryParameter("language", LANGUAGE).build()
         return Http.json.decodeFromString<TitleDetails>(get(url.toString())).trailer
+    }
+
+    /** A search with a URL and key that are not saved yet: throws when either is wrong. */
+    suspend fun test(url: String, apiKey: String) {
+        val base = url.trim().trimEnd('/')
+        require(base.startsWith("http://") || base.startsWith("https://")) { "La dirección empieza con http:// o https://" }
+        require(apiKey.isNotBlank()) { "Falta la API key de Seerr" }
+        val search = "$base/api/v1/search".toHttpUrl().newBuilder().addQueryParameter("query", "test").build()
+        Http.get(Request.Builder().url(search).header("X-Api-Key", apiKey.trim()).build())
     }
 
     private suspend fun endpoint(path: String) =
         "${settings.current().seerrUrl}/api/v1/$path".toHttpUrl()
+
+    /** «movie» or «tv» only: anything else would reach other Seerr endpoints with the admin key. */
+    private fun titlePath(mediaType: String, tmdbId: Int): String {
+        require(mediaType == "movie" || mediaType == "tv") { "mediaType: movie o tv" }
+        return "$mediaType/$tmdbId"
+    }
 
     private suspend fun get(url: String): String {
         val key = settings.current().seerrApiKey

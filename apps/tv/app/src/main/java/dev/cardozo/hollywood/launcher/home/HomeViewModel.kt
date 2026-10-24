@@ -11,9 +11,10 @@ import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.jellyfin.JellyfinHome
 import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.launcherApp
-import dev.cardozo.hollywood.launcher.weather.Weather
 import dev.cardozo.hollywood.launcher.pins.toMediaItem
 import dev.cardozo.hollywood.launcher.settings.Settings
+import dev.cardozo.hollywood.launcher.weather.Weather
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 
 sealed interface JellyfinUi {
     data object NotConnected : JellyfinUi
@@ -88,11 +90,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             app.jellyfin.session.map { it != null }.distinctUntilChanged().collect { refreshJellyfin() }
         }
+        // From the store itself, not the `settings` StateFlow: its made-up initial Settings() would trigger
+        // one extra load at start.
         viewModelScope.launch {
-            settings.map { it.youtubeConfigured to it.youtubeConnected }.distinctUntilChanged().collect { refreshYouTube() }
+            app.settings.settings.map { it.youtubeConfigured to it.youtubeConnected }.distinctUntilChanged().collect { refreshYouTube() }
         }
         viewModelScope.launch {
-            settings.map { it.weatherLatitude to it.weatherLongitude }.distinctUntilChanged().collect { refreshWeather(force = true) }
+            app.settings.settings.map { it.weatherLatitude to it.weatherLongitude }.distinctUntilChanged()
+                .collect { refreshWeather(force = true) }
         }
         viewModelScope.launch {
             var i = 0
@@ -129,19 +134,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** Home retries this every couple of minutes, while it is on screen, until the server answers again. */
     fun retryJellyfin() = refreshJellyfin()
 
+    // One load per source at a time: at start the session collector and onResume both ask, and the retry
+    // can meet a resume. A second request while one runs is dropped; the running one brings the news.
+    private var jellyfinJob: Job? = null
+    private var youtubeJob: Job? = null
+
     private fun refreshJellyfin() {
-        viewModelScope.launch {
+        if (jellyfinJob?.isActive == true) return
+        jellyfinJob = viewModelScope.launch {
             // First load (e.g. after the TV restarts): show the last home from disk at once, then the fresh one.
             if (_jellyfin.value !is JellyfinUi.Ready) {
                 _jellyfin.value = app.jellyfin.cachedHome()?.let { JellyfinUi.Ready(it) } ?: JellyfinUi.Loading
             }
             _jellyfin.value = try {
                 app.jellyfin.loadHome()?.let { JellyfinUi.Ready(it) } ?: JellyfinUi.NotConnected
+            } catch (e: InvalidStatusException) {
+                Log.w(TAG, "Jellyfin answered ${e.status}", e)
+                // The server is up but no longer accepts this session (user deleted, sessions revoked): connect
+                // again, rather than say it does not answer forever.
+                if (e.status == 401 || e.status == 403) {
+                    app.jellyfin.disconnect()
+                    JellyfinUi.NotConnected
+                } else {
+                    staleOrFailed(e)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Jellyfin home failed", e)
-                // Keep showing what there was rather than emptying Home while the server is off.
-                val last = (_jellyfin.value as? JellyfinUi.Ready)?.home ?: app.jellyfin.cachedHome()
-                if (last != null) JellyfinUi.Ready(last, stale = true) else JellyfinUi.Failed(e.message ?: e.javaClass.simpleName)
+                staleOrFailed(e)
             }
             if (_wallpaper.value == null) {
                 _wallpaper.value = (_jellyfin.value as? JellyfinUi.Ready)?.home?.wallpapers?.firstOrNull()
@@ -149,8 +168,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Keep showing what there was rather than emptying Home while the server is off. */
+    private suspend fun staleOrFailed(e: Exception): JellyfinUi {
+        val last = (_jellyfin.value as? JellyfinUi.Ready)?.home ?: app.jellyfin.cachedHome()
+        return if (last != null) JellyfinUi.Ready(last, stale = true) else JellyfinUi.Failed(e.message ?: e.javaClass.simpleName)
+    }
+
     private fun refreshYouTube() {
-        viewModelScope.launch {
+        if (youtubeJob?.isActive == true) return
+        youtubeJob = viewModelScope.launch {
             val s = app.settings.current()
             val savedChannels = s.youtubeChannels.isNotEmpty()
             if (!s.youtubeConfigured && !savedChannels) { _youtube.value = YouTubeUi.NotConfigured; return@launch }
@@ -160,7 +186,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 app.youtube.latest()?.let { YouTubeUi.Ready(it) } ?: YouTubeUi.NotConnected
             } catch (e: Exception) {
                 Log.w(TAG, "YouTube failed", e)
-                YouTubeUi.Failed(e.message ?: e.javaClass.simpleName)
+                // A failed refresh keeps the videos already on screen.
+                _youtube.value as? YouTubeUi.Ready ?: YouTubeUi.Failed(e.message ?: e.javaClass.simpleName)
             }
         }
     }

@@ -1,15 +1,19 @@
 package dev.cardozo.hollywood.launcher.youtube
 
+import android.util.Log
 import dev.cardozo.hollywood.launcher.net.Http
 import dev.cardozo.hollywood.launcher.net.HttpException
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.FormBody
 import okhttp3.Request
+import java.io.IOException
 
 sealed interface YouTubeSignIn {
     /** Shown on the TV: open [url] on the phone and type [code]. */
@@ -20,6 +24,8 @@ sealed interface YouTubeSignIn {
 
 private const val DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
 private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
+private const val REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+private const val TAG = "YouTubeAuth"
 private const val SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 
 @Serializable
@@ -48,8 +54,10 @@ private data class TokenError(val error: String)
  */
 class YouTubeAuth(private val settings: LauncherSettings) {
 
-    private var accessToken: String? = null
-    private var expiresAtMs = 0L
+    // Home, the settings page and the row can all ask at once: one refresh at a time.
+    private val refreshing = Mutex()
+    @Volatile private var accessToken: String? = null
+    @Volatile private var expiresAtMs = 0L
 
     fun signIn(): Flow<YouTubeSignIn> = flow {
         val s = settings.current()
@@ -63,6 +71,9 @@ class YouTubeAuth(private val settings: LauncherSettings) {
             }
         } catch (e: HttpException) {
             emit(YouTubeSignIn.Failed("Google rechazó el client ID (${e.code})"))
+            return@flow
+        } catch (e: IOException) {
+            emit(YouTubeSignIn.Failed("No se pudo hablar con Google"))
             return@flow
         }
         emit(YouTubeSignIn.WaitingForCode(device.verificationUrl, device.userCode))
@@ -86,6 +97,9 @@ class YouTubeAuth(private val settings: LauncherSettings) {
                     "access_denied" -> { emit(YouTubeSignIn.Failed("Se rechazó el acceso")); return@flow }
                     else -> { emit(YouTubeSignIn.Failed("Error de Google (${e.code})")); return@flow }
                 }
+            } catch (e: IOException) {
+                // A dropped connection or a timeout mid-wait: ask again on the next round.
+                continue
             }
             val token = Http.json.decodeFromString<Token>(result)
             accessToken = token.accessToken
@@ -97,13 +111,23 @@ class YouTubeAuth(private val settings: LauncherSettings) {
         emit(YouTubeSignIn.Failed("El código venció"))
     }
 
+    /**
+     * Disconnecting on purpose: the token is revoked at Google (best effort) and the saved channels go too,
+     * so the row does not carry on over RSS. Expiry, unlike this, keeps the channels.
+     */
     suspend fun signOut() {
+        val refreshToken = settings.current().youtubeRefreshToken
         accessToken = null
         settings.setYoutubeRefreshToken("")
+        settings.setYoutubeChannels(emptyList())
+        if (refreshToken.isNotBlank()) {
+            runCatching { post(REVOKE_URL, "token" to refreshToken) }
+                .onFailure { Log.i(TAG, "Revoking the YouTube token failed; it is forgotten here anyway", it) }
+        }
     }
 
     /** A valid access token, refreshed when it is about to expire; null when not signed in. */
-    suspend fun accessToken(): String? {
+    suspend fun accessToken(): String? = refreshing.withLock {
         val s = settings.current()
         if (!s.youtubeConnected) return null
         accessToken?.let { if (System.currentTimeMillis() < expiresAtMs - 60_000) return it }
@@ -124,7 +148,7 @@ class YouTubeAuth(private val settings: LauncherSettings) {
         }
         accessToken = token.accessToken
         expiresAtMs = System.currentTimeMillis() + token.expiresIn * 1_000L
-        return token.accessToken
+        token.accessToken
     }
 
     private suspend fun post(url: String, vararg fields: Pair<String, String>): String {
