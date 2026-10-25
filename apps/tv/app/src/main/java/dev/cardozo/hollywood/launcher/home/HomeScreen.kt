@@ -79,6 +79,7 @@ import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.content.open
 import dev.cardozo.hollywood.launcher.jellyfin.Player
+import dev.cardozo.hollywood.launcher.news.NewsChannel
 import dev.cardozo.hollywood.launcher.system.launch
 import dev.cardozo.hollywood.launcher.system.isDefaultHome
 import dev.cardozo.hollywood.launcher.system.openHomeSettings
@@ -104,7 +105,7 @@ private const val IDLE_BEFORE_ROTATING_MS = 10_000L
 private val Arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
 
 /** Which row has focus; with the id of the focused card, what the hero shows. */
-private enum class RowKey { SHELF, RECENT, VIDEOS, PINNED, OTHER }
+private enum class RowKey { SHELF, NEWS, RECENT, VIDEOS, PINNED, OTHER }
 
 private data class Focused(val row: RowKey, val id: String)
 
@@ -145,6 +146,7 @@ fun HomeScreen(
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val weather by viewModel.weather.collectAsStateWithLifecycle()
+    val news by viewModel.news.collectAsStateWithLifecycle()
 
     // The shelf follows the app last focused in the dock; the hero follows whatever is focused.
     var shelfApp by remember { mutableStateOf<String?>(null) }
@@ -161,6 +163,7 @@ fun HomeScreen(
     var focus by remember { mutableStateOf<Focused?>(null) }
     fun rowOf(key: RowKey): List<MediaItem> = when (key) {
         RowKey.SHELF -> shelfItems
+        RowKey.NEWS -> news
         RowKey.RECENT -> recent
         RowKey.VIDEOS -> moreVideos
         RowKey.PINNED -> pinned
@@ -195,6 +198,13 @@ fun HomeScreen(
         while (onScreen) {
             viewModel.refreshWeather()
             delay(WEATHER_EVERY_MS)
+        }
+    }
+    LaunchedEffect(onScreen) {
+        while (onScreen) {
+            viewModel.refreshNews()
+            // Nothing loaded yet (the network was not up at boot): try again soon rather than in 20 minutes.
+            delay(if (news.isEmpty()) JELLYFIN_RETRY_MS else NEWS_EVERY_MS)
         }
     }
     LaunchedEffect(keyPresses, row, focusedItem, onScreen) {
@@ -334,6 +344,11 @@ fun HomeScreen(
                     onAllApps = onAllApps,
                 )
 
+                if (news.isNotEmpty()) {
+                    Spacer(Modifier.height(36.dp))
+                    Box(Modifier.padding(start = Edge)) { RowTitle("Noticias", NewsChannel.entries.joinToString(" · ") { it.label }) }
+                    MediaRow(news, showing, onFocusItem = { focusBelow(RowKey.NEWS, it) }, onPlay = play)
+                }
                 // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
                 if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
                     Spacer(Modifier.height(36.dp))

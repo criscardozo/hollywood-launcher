@@ -106,6 +106,14 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean =
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (showing) ShowingBar(Modifier.align(Alignment.TopCenter))
+                item.newsChannel?.let { channel ->
+                    Text(
+                        channel.label, fontSize = 9.sp, fontWeight = FontWeight.Black, color = channel.foreground,
+                        modifier = Modifier.align(Alignment.TopStart).padding(5.dp)
+                            .background(channel.background, RoundedCornerShape(3.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
                 if (item.progress != null) {
                     ProgressBar(item.progress, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp))
                 }

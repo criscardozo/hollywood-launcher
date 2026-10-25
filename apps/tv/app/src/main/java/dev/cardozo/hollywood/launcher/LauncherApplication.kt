@@ -10,6 +10,7 @@ import dev.cardozo.hollywood.launcher.admin.AdminServer
 import dev.cardozo.hollywood.launcher.apps.InstalledApps
 import dev.cardozo.hollywood.launcher.jellyfin.JellyfinRepository
 import dev.cardozo.hollywood.launcher.jellyfin.JellyfinSessionStore
+import dev.cardozo.hollywood.launcher.news.NewsRepository
 import dev.cardozo.hollywood.launcher.pins.PinsRepository
 import dev.cardozo.hollywood.launcher.pins.SeerrClient
 import dev.cardozo.hollywood.launcher.remote.RemoteKeys
@@ -25,6 +26,7 @@ class LauncherApplication : Application(), SingletonImageLoader.Factory {
     val jellyfin by lazy { JellyfinRepository(this, JellyfinSessionStore(this)) }
     val youtubeAuth by lazy { YouTubeAuth(settings) }
     val youtube by lazy { YouTubeRepository(youtubeAuth, settings) }
+    val news by lazy { NewsRepository() }
     val pins by lazy { PinsRepository(settings) }
     val seerr by lazy { SeerrClient(settings) }
     val weather by lazy { WeatherRepository(settings) }

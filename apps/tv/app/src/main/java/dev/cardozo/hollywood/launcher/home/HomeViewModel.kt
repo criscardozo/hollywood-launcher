@@ -57,6 +57,7 @@ private const val TAG = "HomeViewModel"
 private const val WALLPAPER_EVERY_MS = 3 * 60_000L
 const val SHELF_SIZE = 15
 const val WEATHER_EVERY_MS = 30 * 60_000L
+const val NEWS_EVERY_MS = 20 * 60_000L
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -78,6 +79,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _youtube = MutableStateFlow<YouTubeUi>(YouTubeUi.Loading)
     val youtube: StateFlow<YouTubeUi> = _youtube.asStateFlow()
+
+    private val _news = MutableStateFlow<List<MediaItem>>(emptyList())
+    val news: StateFlow<List<MediaItem>> = _news.asStateFlow()
 
     private val _wallpaper = MutableStateFlow<String?>(null)
     val wallpaper: StateFlow<String?> = _wallpaper.asStateFlow()
@@ -114,6 +118,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         refreshJellyfin()
         refreshYouTube()
         refreshWeather()
+        refreshNews()
+    }
+
+    /** Home calls it every 20 minutes while it is on screen; the repository caches for as long. */
+    fun refreshNews() {
+        if (newsJob?.isActive == true) return
+        newsJob = viewModelScope.launch {
+            // A failed refresh keeps the row as it was; with nothing loaded yet the row just does not show.
+            runCatching { app.news.latest() }
+                .onSuccess { _news.value = it }
+                .onFailure { Log.w(TAG, "News failed", it) }
+        }
     }
 
     /** At most every half hour unless the place changed; Home calls it while it is on screen. */
@@ -138,6 +154,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // can meet a resume. A second request while one runs is dropped; the running one brings the news.
     private var jellyfinJob: Job? = null
     private var youtubeJob: Job? = null
+    private var newsJob: Job? = null
 
     private fun refreshJellyfin() {
         if (jellyfinJob?.isActive == true) return

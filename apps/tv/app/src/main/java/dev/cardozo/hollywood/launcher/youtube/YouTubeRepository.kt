@@ -38,7 +38,7 @@ private const val MAX_VIDEOS = 40
 @Serializable private data class ContentDetails(val duration: String? = null)
 @Serializable private data class Statistics(val viewCount: String? = null)
 
-private data class FeedEntry(
+internal data class FeedEntry(
     val videoId: String,
     val title: String,
     val channel: String,
@@ -142,9 +142,7 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
         channelIds.map { id ->
             async {
                 limit.withPermit {
-                    runCatching {
-                        parseFeed(Http.get(Request.Builder().url("https://www.youtube.com/feeds/videos.xml?channel_id=$id").build()))
-                    }.getOrNull()
+                    runCatching { channelFeed(id) }.getOrNull()
                 }
             }
         }.awaitAll()
@@ -166,6 +164,10 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
     private fun authorized(url: String, token: String) =
         Request.Builder().url(url).header("Authorization", "Bearer $token").build()
 }
+
+/** A channel's latest 15 uploads, from its public feed: no sign-in and no quota. */
+internal suspend fun channelFeed(channelId: String): List<FeedEntry> =
+    parseFeed(Http.get(Request.Builder().url("https://www.youtube.com/feeds/videos.xml?channel_id=$channelId").build()))
 
 /** The channel feed: Atom with yt: and media: extensions. Shorts link to /shorts/ instead of /watch. */
 private fun parseFeed(xml: String): List<FeedEntry> {
@@ -206,7 +208,7 @@ private fun parseFeed(xml: String): List<FeedEntry> {
     return entries
 }
 
-private fun FeedEntry.toMediaItem(duration: Duration?, views: Long?): MediaItem {
+internal fun FeedEntry.toMediaItem(duration: Duration? = null, views: Long? = null): MediaItem {
     val age = relativeAge(published)
     return MediaItem(
         id = videoId,

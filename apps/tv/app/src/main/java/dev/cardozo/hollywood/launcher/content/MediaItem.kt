@@ -1,6 +1,7 @@
 package dev.cardozo.hollywood.launcher.content
 
 import androidx.compose.ui.graphics.Color
+import dev.cardozo.hollywood.launcher.news.NewsChannel
 import kotlinx.serialization.Serializable
 
 /** Where a card comes from: it decides the hero badge and what OK does. */
@@ -45,4 +46,6 @@ data class MediaItem(
     val duration: String? = null,
     /** What OK opens for YouTube and pinned items (a watch URL or the link the user pinned). */
     val link: String? = null,
+    /** For the «Noticias» row: the channel whose badge goes on the card. */
+    val newsChannel: NewsChannel? = null,
 )

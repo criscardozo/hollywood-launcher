@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: fila de noticias</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --fg: #f2f3f5; --dim: rgba(242,243,245,.64); --faint: rgba(242,243,245,.42); --bg: #07080b;
+    --font: -apple-system, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #1b1d22; color: var(--fg); font-family: var(--font); }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; flex-wrap: wrap; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 10px 0 0; }
+  .chrome .sep { width: 1px; height: 22px; background: #3a3d45; margin: 0 6px; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; align-items: flex-start; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; }
+  .notes { width: 320px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+
+  /* The stage is the TV in dp: 960 × 540 (1920 × 1080 px at density 2), like the launcher's Compose code. */
+  .stage { position: absolute; left: 0; top: 0; width: 960px; height: 540px; transform-origin: 0 0; overflow: hidden; background: var(--bg); }
+  .backdrop { position: absolute; inset: 0; background: radial-gradient(80% 90% at 78% 18%, #5d7186, #26303b 55%, var(--bg) 85%); }
+  .backdrop::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(7,8,11,.94), rgba(7,8,11,.55) 55%, rgba(7,8,11,.15)), linear-gradient(180deg, transparent 30%, rgba(7,8,11,.98)); }
+  .page { position: absolute; left: 0; right: 0; transition: top .3s; }
+  .edge { padding-left: 48px; }
+  .rowtitle { font-size: 15px; font-weight: 700; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; }
+  .rowtitle small { font-size: 11.5px; font-weight: 500; color: var(--faint); }
+  .row { display: flex; gap: 16px; padding-left: 48px; }
+
+  .dock .app { width: 116px; height: 65px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 14px; flex: none; opacity: .45; }
+  .yt { background: #fff; color: #ff0000; } .wh { background: #0b1020; color: #a78bfa; } .pv { background: #1a98ff; color: #fff; }
+  .dp { background: linear-gradient(135deg, #0b1f6b, #1a4fd6); color: #fff; } .hb { background: #0a0a0a; color: #fff; } .sbsapp { background: #ffcc00; color: #111; }
+
+  /* Cards share the launcher's focus style B: white ring with a gap, the rest dimmed. */
+  .card { position: relative; flex: none; border-radius: 8px; opacity: .45; transition: transform .15s; }
+  .card .thumb { position: relative; border-radius: 8px; overflow: hidden; background-size: cover; background-position: center; }
+  .card.f { opacity: 1; transform: scale(1.06); z-index: 1; }
+  .card.f .thumb { box-shadow: 0 0 0 2px var(--bg), 0 0 0 5px #fff, 0 14px 30px rgba(0,0,0,.6); }
+  .card .t { font-size: 11px; font-weight: 600; margin-top: 7px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card.f .t { font-size: 12.5px; }
+  .card .s { font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .badge { position: absolute; left: 6px; top: 6px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 900;
+    display: grid; place-items: center; letter-spacing: -.2px; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  /* YouTube's channel feed has neither durations nor a live flag: the mockup shows only what it can know. */
+  .dur { display: none; position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.75); font-size: 9.5px; font-weight: 700; padding: 1px 4px; border-radius: 3px; }
+  .live { position: absolute; right: 6px; top: 6px; background: #e11d2e; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; letter-spacing: .5px; }
+  .stripe { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+
+  /* B: one card per channel. */
+  .chan .thumb { width: 196px; height: 110px; }
+  .chan .logo { position: absolute; left: 8px; bottom: 8px; height: 22px; padding: 0 8px; border-radius: 5px; font-weight: 900; font-size: 12px; display: grid; place-items: center; }
+  .chan .count { position: absolute; right: 8px; top: 8px; background: rgba(0,0,0,.7); font-size: 9.5px; font-weight: 700; padding: 2px 6px; border-radius: 10px; }
+
+  /* C: channel chips above the row. */
+  .chips { display: flex; gap: 8px; padding-left: 48px; margin: 0 0 12px; }
+  .chip { height: 24px; padding: 0 11px; border-radius: 12px; font-size: 11px; font-weight: 700; display: grid; place-items: center; background: rgba(255,255,255,.1); color: var(--dim); }
+  .chip.on { background: var(--fg); color: #111; }
+  .chip.f { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #fff; }
+
+  /* D: the newest, big. */
+  .lead .thumb { width: 300px; height: 169px; }
+  .lead .over { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 12px 10px; background: linear-gradient(180deg, transparent, rgba(0,0,0,.85)); }
+  .lead .over .t { font-size: 14px; margin: 0; -webkit-line-clamp: 2; }
+  .lead .over .s { font-size: 10.5px; color: var(--dim); }
+  .small2 { display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
+  .small2 .card { display: flex; gap: 10px; align-items: center; width: 290px; }
+  .small2 .thumb { width: 140px; height: 79px; flex: none; }
+  .small2 .t { margin: 0; }
+
+  .caret { position: absolute; font-size: 11px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Home · fila «Noticias» debajo de las apps</h1>
+  <button class="tab" data-layout="A">A · Mezcladas</button>
+  <button class="tab" data-layout="B">B · Un canal por tarjeta</button>
+  <button class="tab" data-layout="C">C · Con filtro de canal</button>
+  <button class="tab" data-layout="D">D · Última grande</button>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport"><div class="stage" id="stage"></div></div>
+  <div class="notes" id="notes"></div>
+</div>
+<script>
+// Synthetic thumbnails and made-up headlines only: the repo is public.
+const CH = {
+  "7":   { name: "7NEWS",   bg: "#e2001a", fg: "#fff", art: ["#3b0a10", "#a3202c"] },
+  "9":   { name: "9News",   bg: "#fff",    fg: "#0a3d91", art: ["#071a3d", "#1f5fbf"] },
+  "10":  { name: "10 News", bg: "#111",    fg: "#fff",   art: ["#1a1a1a", "#5a5a5a"] },
+  "abc": { name: "ABC",     bg: "#000",    fg: "#fff",   art: ["#06262a", "#1d7a80"] },
+  "sbs": { name: "SBS",     bg: "#ffcc00", fg: "#111",   art: ["#2d2600", "#8a7500"] },
+};
+const svgUrl = svg => `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29")}')`;
+function art(ch, seed) {
+  const [a, b] = CH[ch].art;
+  const x = 30 + (seed * 37) % 50, r = 30 + (seed * 13) % 25;
+  return svgUrl(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90' preserveAspectRatio='xMidYMid slice'>
+    <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='${a}'/><stop offset='1' stop-color='${b}'/></linearGradient></defs>
+    <rect width='160' height='90' fill='url(#g)'/><circle cx='${x + 40}' cy='38' r='${r / 2}' fill='rgba(255,255,255,.18)'/>
+    <rect x='0' y='64' width='160' height='26' fill='rgba(0,0,0,.25)'/><rect x='${x}' y='44' width='${r}' height='46' rx='10' fill='rgba(0,0,0,.35)'/></svg>`);
+}
+const NEWS = [
+  ["7",   "Storm warning issued for Sydney as heavy rain moves up the coast", "hace 12 min", "2:41"],
+  ["abc", "Reserve Bank holds the cash rate, signals cuts could come next year", "hace 25 min", "4:05"],
+  ["9",   "Commuters face delays after signal fault on the train network", "hace 40 min", "1:58"],
+  ["sbs", "World leaders gather for climate summit as talks enter final week", "hace 1 h", "3:22"],
+  ["10",  "Housing prices climb again in most capital cities", "hace 1 h", "2:10"],
+  ["7",   "Bushfire crews prepare for an early start to the season", "hace 2 h", "3:47"],
+  ["9",   "Matildas name squad for the upcoming friendlies", "hace 2 h", "1:30"],
+];
+const badge = ch => `<span class="badge" style="background:${CH[ch].bg};color:${CH[ch].fg}">${CH[ch].name}</span>`;
+
+function mediaCard([ch, title, age, dur], i, focused, opts = {}) {
+  const w = opts.w ?? 180, h = Math.round(w * 9 / 16);
+  return `<div class="card ${focused ? "f" : ""}" style="width:${w}px">
+    <div class="thumb" style="height:${h}px;background-image:${art(ch, i)}">
+      ${opts.badge === false ? "" : badge(ch)}${opts.live ? `` : ""}<span class="dur">${dur}</span>
+      ${opts.stripe ? `<span class="stripe" style="background:${CH[ch].bg}"></span>` : ""}
+    </div>
+    <div class="t">${title}</div><div class="s">${opts.channelInLine ? CH[ch].name + " · " : ""}${age}</div></div>`;
+}
+
+const dock = `<div class="row dock">${[["yt", "YouTube"], ["wh", "Wholphin"], ["pv", "prime video"], ["dp", "Disney+"], ["hb", "max"], ["sbsapp", "SBS"], ["pv", "Kayo"]]
+  .map(([c, n]) => `<div class="app ${c}">${n}</div>`).join("")}</div>`;
+const nextRow = `<div class="edge" style="margin-top:26px"><div class="rowtitle">Agregado recientemente <small>Jellyfin</small></div></div>
+  <div class="row">${Array.from({ length: 8 }, (_, i) => `<div class="card"><div class="thumb" style="width:96px;height:144px;background:linear-gradient(160deg,hsl(${i * 47} 35% 30%),hsl(${i * 47} 40% 12%))"></div></div>`).join("")}</div>`;
+
+const LAYOUTS = {
+  A: {
+    title: "A · Mezcladas por fecha",
+    notes: `<h2>A · Mezcladas por fecha</h2><ul>
+      <li>Los videos de los cinco canales en una sola fila, de los más nuevos a los más viejos.</li>
+      <li>Cada tarjeta lleva el logo del canal arriba a la izquierda.</li>
+      <li>Debajo, el título y cuándo se subió («hace 12 min»).</li>
+      <li>Mismo tamaño y foco que la fila de YouTube: no hace falta aprender nada nuevo.</li></ul>
+      <p>Es la más simple y la que más se parece a lo que ya hay. Si un canal sube mucho, puede tapar a los demás; se puede limitar a 4 por canal.</p>`,
+    body: () => `<div class="edge"><div class="rowtitle">Noticias <small>7NEWS · 9News · 10 News · ABC · SBS</small></div></div>
+      <div class="row">${NEWS.map((n, i) => mediaCard(n, i, i === 1)).join("")}</div>`,
+  },
+  B: {
+    title: "B · Una tarjeta por canal",
+    notes: `<h2>B · Una tarjeta por canal</h2><ul>
+      <li>Cinco tarjetas fijas, una por canal, siempre en el mismo orden: 7, 9, 10, ABC, SBS.</li>
+      <li>Cada una muestra el último video del canal; un costado del color del canal y su logo grande.</li>
+      <li>OK reproduce ese último video.</li>
+      <li>Arriba a la derecha, cuántos videos nuevos hay desde la última vez.</li></ul>
+      <p>Muy ordenada y fácil de encontrar el canal favorito, pero sólo se ve un video por canal: para ver más hay que ir a YouTube.</p>`,
+    body: () => `<div class="edge"><div class="rowtitle">Noticias <small>el último de cada canal</small></div></div>
+      <div class="row">${["7", "9", "10", "abc", "sbs"].map((ch, i) => {
+        const n = NEWS.find(x => x[0] === ch);
+        return `<div class="card chan ${i === 0 ? "f" : ""}" style="width:196px">
+          <div class="thumb" style="background-image:${art(ch, i)};border-left:5px solid ${CH[ch].bg}">
+            <span class="logo" style="background:${CH[ch].bg};color:${CH[ch].fg}">${CH[ch].name}</span>
+            <span class="count">${[3, 2, 1, 4, 2][i]} nuevos</span><span class="dur">${n[3]}</span></div>
+          <div class="t">${n[1]}</div><div class="s">${n[2]}</div></div>`;
+      }).join("")}</div>`,
+  },
+  C: {
+    title: "C · Con filtro de canal",
+    notes: `<h2>C · Con filtro de canal</h2><ul>
+      <li>Arriba de la fila, unas etiquetas: Todas · 7NEWS · 9News · 10 News · ABC · SBS.</li>
+      <li>Subiendo desde la fila se llega a las etiquetas; con ← → se elige y la fila muestra sólo ese canal.</li>
+      <li>«Todas» es como la A.</li>
+      <li>La elección se recuerda.</li></ul>
+      <p>La más completa, pero suma un paso más de foco entre las apps y la fila: con el control remoto es un «abajo» extra para llegar a los videos.</p>`,
+    body: () => `<div class="edge"><div class="rowtitle">Noticias</div></div>
+      <div class="chips"><span class="chip">Todas</span><span class="chip on f">7NEWS</span><span class="chip">9News</span><span class="chip">10 News</span><span class="chip">ABC</span><span class="chip">SBS</span></div>
+      <div class="row">${NEWS.filter(n => n[0] === "7").concat([["7", "Police appeal for witnesses after crash on the M1", "hace 3 h", "1:12"], ["7", "Weather: a warm week ahead for most of the east coast", "hace 4 h", "2:05"], ["7", "Local footy club celebrates 100 years", "hace 5 h", "3:01"]])
+        .map((n, i) => mediaCard(n, i, false, { badge: false, stripe: true })).join("")}</div>`,
+  },
+  D: {
+    title: "D · Última grande",
+    notes: `<h2>D · Última grande</h2><ul>
+      <li>La noticia más reciente ocupa una tarjeta grande con el título encima de la imagen.</li>
+      <li>Al lado, las dos siguientes en formato lista, y después la fila sigue con tarjetas normales.</li>
+</ul>
+      <p>La que más destaca las noticias, pero es más alta que las otras filas y empuja «Agregado recientemente» hacia abajo.</p>`,
+    body: () => `<div class="edge"><div class="rowtitle">Noticias <small>7NEWS · 9News · 10 News · ABC · SBS</small></div></div>
+      <div class="row" style="align-items:flex-start">
+        <div class="card lead f" style="width:300px"><div class="thumb" style="background-image:${art("abc", 4)}">
+          ${badge("abc")}
+          <div class="over"><div class="t">Federal budget: what it means for your household</div><div class="s">ABC · hace 5 min</div></div></div></div>
+        <div class="small2">${NEWS.slice(0, 2).map((n, i) => `<div class="card"><div class="thumb" style="background-image:${art(n[0], i)}">${badge(n[0])}<span class="dur">${n[3]}</span></div>
+          <div><div class="t">${n[1]}</div><div class="s">${n[2]}</div></div></div>`).join("")}</div>
+        ${NEWS.slice(2, 5).map((n, i) => mediaCard(n, i + 2, false)).join("")}
+      </div>`,
+  },
+};
+
+let layout = LAYOUTS[location.hash.slice(1)] ? location.hash.slice(1) : "A";
+function render() {
+  const L = LAYOUTS[layout];
+  document.getElementById("stage").innerHTML = `<div class="backdrop"></div>
+    <div class="page" style="top:-120px">
+      <div class="edge" style="height:150px"></div>
+      <div style="margin-top:0">${dock}</div>
+      <div style="margin-top:28px">${L.body()}</div>
+      ${nextRow}
+    </div>`;
+  document.getElementById("notes").innerHTML = L.notes;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.layout === layout));
+}
+function fit() {
+  const v = document.getElementById("viewport");
+  document.getElementById("stage").style.transform = `scale(${v.clientWidth / 960})`;
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => { layout = t.dataset.layout; render(); });
+new ResizeObserver(fit).observe(document.getElementById("viewport"));
+render(); fit();
+</script>
+</body>
+</html>
