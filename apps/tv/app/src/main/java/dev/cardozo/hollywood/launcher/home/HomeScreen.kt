@@ -1,6 +1,7 @@
 package dev.cardozo.hollywood.launcher.home
 
 import android.app.Activity
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -80,6 +81,7 @@ import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.content.open
 import dev.cardozo.hollywood.launcher.jellyfin.Player
 import dev.cardozo.hollywood.launcher.news.NewsChannel
+import dev.cardozo.hollywood.launcher.screensaver.ScreensaverActivity
 import dev.cardozo.hollywood.launcher.system.launch
 import dev.cardozo.hollywood.launcher.system.isDefaultHome
 import dev.cardozo.hollywood.launcher.system.openHomeSettings
@@ -88,6 +90,7 @@ import dev.cardozo.hollywood.launcher.system.openInput
 import dev.cardozo.hollywood.launcher.system.openInputs
 import dev.cardozo.hollywood.launcher.system.openSettings
 import dev.cardozo.hollywood.launcher.system.requestDefaultHomeIntent
+import dev.cardozo.hollywood.launcher.system.start
 import dev.cardozo.hollywood.launcher.ui.Background
 import dev.cardozo.hollywood.launcher.ui.Dim
 import dev.cardozo.hollywood.launcher.ui.Faint
@@ -230,6 +233,15 @@ fun HomeScreen(
     // Back from details: the restorer puts focus on the card that opened it.
     val pageFocus = remember { FocusRequester() }
     val tvRow = remember { BringIntoViewRequester() }
+    var tvRowFocused by remember { mutableStateOf(false) }
+    // Back from what a TV tile opened (settings, the screensaver), focus is still on the tile but the page may
+    // have moved while Home was away: show the row again.
+    LaunchedEffect(onScreen) {
+        if (onScreen && tvRowFocused) {
+            delay(100)
+            tvRow.bringIntoView()
+        }
+    }
     // «Usar como inicio» shows until Hollywood holds the HOME role; checked again whenever Home comes back.
     var isDefaultHome by remember { mutableStateOf(context.isDefaultHome()) }
     LaunchedEffect(onScreen) { if (onScreen) isDefaultHome = context.isDefaultHome() }
@@ -385,6 +397,7 @@ fun HomeScreen(
                         // Focus would only bring the tile itself into view, flush with the bottom of the screen.
                         .bringIntoViewRequester(tvRow)
                         .onFocusChanged {
+                            tvRowFocused = it.hasFocus
                             if (it.hasFocus) {
                                 toTopJob?.cancel()
                                 focus = Focused(RowKey.OTHER, "")
@@ -397,6 +410,8 @@ fun HomeScreen(
                     SystemTile("PlayStation 5", icon = painterResource(R.drawable.playstation)) { context.openInput(PLAYSTATION_INPUT) }
                     SystemTile("Entradas", "⇄") { context.openInputs() }
                     SystemTile("Ajustes", "⚙", modifier = Modifier.focusRequester(settingsTile)) { context.openSettings() }
+                    // Our screensaver on demand, to try it without waiting for the TV to go idle.
+                    SystemTile("Salvapantallas", "☾") { context.start(Intent(context, ScreensaverActivity::class.java)) }
                     if (!isDefaultHome) {
                         SystemTile("Usar como inicio", "⌂") {
                             val dialog = context.requestDefaultHomeIntent()

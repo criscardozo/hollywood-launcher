@@ -57,6 +57,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".screensaver.ScreensaverActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.Launcher" />
+
         <service
             android:name=".screensaver.ClockDream"
             android:exported="true"

@@ -49,7 +49,8 @@ página de configuración; se actualiza cada media hora mientras Home está en p
 
 **Última fila, «Tele»:** PlayStation 5 (pasa directo a HDMI 2: la entrada
 `com.tcl.tvinput/.TvPassThroughService/HW16`, que abre `com.tcl.tv`), Entradas (selector de HDMI de TCL,
-`com.android.tv.action.VIEW_INPUTS`), Ajustes (los de la tele) y, mientras Hollywood no sea el inicio,
+`com.android.tv.action.VIEW_INPUTS`), Ajustes (los de la tele), Salvapantallas (abre el nuestro en el
+momento, para probarlo; cualquier tecla lo cierra) y, mientras Hollywood no sea el inicio,
 **Usar como inicio**: el diálogo de Android para elegir la app de inicio (rol HOME), o los ajustes de
 inicio si el sistema no lo ofrece. En el emulador, elegirlo funcionó; el launcher de Google, si sigue
 habilitado, puede seguir abriendo pantallas suyas (desactivarlo es la fase B del debloat).
@@ -97,6 +98,9 @@ azar de Jellyfin cada 20 s, con fundido. El fondo de la película a pantalla com
 y abajo a la izquierda el póster, el título, año · género · duración · puntaje y la sinopsis. El reloj va
 arriba a la derecha. Texto y reloj se corren unos píxeles para que nada quede marcado en la pantalla.
 Sin películas con póster y sinopsis, vuelven los fondos solos cada 45 s; sin Jellyfin, solo el reloj.
+La vista es `FilmShow`, compartida por el sueño de Android (`ClockDream`, el que arranca la tele) y por
+`ScreensaverActivity`, que abre la ficha «Salvapantallas»: una app no puede arrancar un sueño. Para que
+la tele use el nuestro hay que elegirlo en `screensaver_components` (hoy sigue el de Google, `dreamx`).
 
 ## Configuración
 
