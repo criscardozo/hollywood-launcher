@@ -21,11 +21,23 @@ private const val NEWS_TTL_MS = 20 * 60_000L
 private const val PER_CHANNEL = 4
 /** Older than this is not news any more. */
 private const val MAX_AGE_HOURS = 48L
+private val NINE_BULLETIN = Regex("""^9News ([^|]+?) \|""")
 
 /** The Australian news channels of the «Noticias» row, with the colours of their badge on each card. */
-enum class NewsChannel(val youtubeId: String, val label: String, val background: Color, val foreground: Color) {
+enum class NewsChannel(
+    val youtubeId: String,
+    val label: String,
+    val background: Color,
+    val foreground: Color,
+    /** Which videos of the channel go in the row, by title. */
+    val keeps: (String) -> Boolean = { true },
+) {
     SEVEN("UC5T7D-Dh1eDGtsAFCuwv_Sw", "7NEWS", Color(0xFFE2001A), Color.White),
-    NINE("UCIYLOcEUX6TbBo7HQVF2PKA", "9News", Color.White, Color(0xFF0A3D91)),
+    // 9News uploads the full bulletin of each city («9News Brisbane | Sunday 25 October | Full Bulletin»),
+    // all alike: only Sydney's.
+    NINE("UCIYLOcEUX6TbBo7HQVF2PKA", "9News", Color.White, Color(0xFF0A3D91), keeps = { title ->
+        NINE_BULLETIN.find(title)?.groupValues?.get(1)?.equals("Sydney", ignoreCase = true) ?: true
+    }),
     TEN("UC64A-bbH15b5kN5A32CErOA", "10 News", Color(0xFF111111), Color.White),
     ABC("UCVgO39Bk5sMo66-6o6Spn6Q", "ABC", Color.Black, Color.White),
     SBS("UCuuTCooIMbBFHNbPcSS70uw", "SBS", Color(0xFFFFCC00), Color(0xFF111111)),
@@ -59,7 +71,7 @@ class NewsRepository {
             }
             videos = fetched.filterNotNull()
                 .flatMap { (channel, entries) ->
-                    entries.filter { !it.isShort && it.published.isAfter(cutoff) }
+                    entries.filter { !it.isShort && it.published.isAfter(cutoff) && channel.keeps(it.title) }
                         .sortedByDescending { it.published }
                         .take(PER_CHANNEL)
                         .map { channel to it }
