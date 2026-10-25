@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,7 +52,9 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -97,6 +101,8 @@ private val Edge = 48.dp
 
 /** With no key pressed for this long, the hero starts walking the focused row on its own. */
 private const val IDLE_BEFORE_ROTATING_MS = 10_000L
+private val Arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
+
 /** Which row has focus; with the id of the focused card, what the hero shows. */
 private enum class RowKey { SHELF, RECENT, VIDEOS, PINNED, OTHER }
 
@@ -265,8 +271,13 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Background)
             .onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown) keyPresses++
-                false
+                if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val wakingUp = showing != null && it.key in Arrows
+                keyPresses++
+                // While the hero walks the row, the focused card may be scrolled out of sight: the first arrow
+                // only stops the walk and brings the row back to it, instead of moving focus from where
+                // nobody can see it. OK still opens the focused card.
+                wakingUp
             },
     ) {
         // Not every YouTube video has a maxres thumbnail: the card's image stands in for a missing backdrop.
@@ -503,7 +514,10 @@ private fun ShelfRow(
 @Composable
 fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     var focusedId by remember { mutableStateOf<String?>(null) }
+    val list = rememberLazyListState()
+    FollowShowing(list, items, showing, focusedId)
     LazyRow(
+        state = list,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
         modifier = Modifier.focusRestorer().onFocusChanged { if (!it.hasFocus) focusedId = null },
@@ -556,7 +570,10 @@ private fun Dock(
 @Composable
 private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     var focusedId by remember { mutableStateOf<String?>(null) }
+    val list = rememberLazyListState()
+    FollowShowing(list, items, showing, focusedId)
     LazyRow(
+        state = list,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
         modifier = Modifier.focusRestorer().onFocusChanged { if (!it.hasFocus) focusedId = null },
@@ -572,6 +589,27 @@ private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: 
                 onPlay(item)
             }
         }
+    }
+}
+
+/**
+ * Keeps the row on what matters: the card the idle hero is showing while it walks the row (it can be far
+ * to the right, off screen), and the focused card again once any key stops it. Otherwise the bar marking
+ * the shown card, or the focus itself, can sit where nobody sees it. A card already fully visible does not
+ * move the row.
+ */
+@Composable
+private fun FollowShowing(list: LazyListState, items: List<MediaItem>, showing: MediaItem?, focusedId: String?) {
+    LaunchedEffect(showing?.id) {
+        val target = showing?.id ?: focusedId ?: return@LaunchedEffect
+        val index = items.indexOfFirst { it.id == target }
+        if (index < 0) return@LaunchedEffect
+        val layout = list.layoutInfo
+        val card = layout.visibleItemsInfo.firstOrNull { it.index == index }
+        val fullyVisible = card != null && card.offset >= layout.viewportStartOffset &&
+            card.offset + card.size <= layout.viewportEndOffset - layout.afterContentPadding
+        // One card of context to its left, so it does not sit flush against the edge.
+        if (!fullyVisible) list.animateScrollToItem((index - 1).coerceAtLeast(0))
     }
 }
 
