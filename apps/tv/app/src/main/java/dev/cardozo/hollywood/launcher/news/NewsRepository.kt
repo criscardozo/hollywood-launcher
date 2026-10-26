@@ -1,5 +1,6 @@
 package dev.cardozo.hollywood.launcher.news
 
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.youtube.channelFeed
@@ -16,6 +17,7 @@ import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 
+private const val TAG = "News"
 private const val NEWS_TTL_MS = 20 * 60_000L
 /** So one channel that uploads all day does not push the others off the row. */
 private const val PER_CHANNEL = 4
@@ -62,7 +64,11 @@ class NewsRepository {
             val cutoff = Instant.now().minus(Duration.ofHours(MAX_AGE_HOURS))
             val fetched = coroutineScope {
                 NewsChannel.entries.map { channel ->
-                    async { runCatching { channel to channelFeed(channel.youtubeId) }.getOrNull() }
+                    async {
+                        runCatching { channel to channelFeed(channel.youtubeId) }
+                            .onFailure { Log.w(TAG, "${channel.label} did not load", it) }
+                            .getOrNull()
+                    }
                 }.awaitAll()
             }
             if (fetched.all { it == null }) {
