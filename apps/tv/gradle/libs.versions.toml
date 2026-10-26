@@ -15,6 +15,7 @@ jellyfinSdk = "1.9.2"
 coroutines = "1.11.0"
 slf4j = "2.0.20"
 okhttp = "5.5.0"
+dadb = "2.0.0"
 serialization = "1.11.0"
 nanohttpd = "2.3.1"
 
@@ -35,6 +36,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 jellyfin-core = { module = "org.jellyfin.sdk:jellyfin-core", version.ref = "jellyfinSdk" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+dadb = { module = "dev.mobile:dadb", version.ref = "dadb" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }

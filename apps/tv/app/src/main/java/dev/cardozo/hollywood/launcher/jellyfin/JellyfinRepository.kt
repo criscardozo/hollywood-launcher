@@ -57,7 +57,15 @@ sealed interface QuickConnectState {
 
 /** One film of the screensaver: its backdrop full screen, the poster and the text over it. */
 @Serializable
-data class ScreensaverSlide(val title: String, val meta: String, val overview: String, val backdropUrl: String, val posterUrl: String)
+data class ScreensaverSlide(
+    val title: String,
+    val meta: String,
+    val overview: String,
+    val backdropUrl: String,
+    val posterUrl: String,
+    /** The film's Jellyfin id, for OK on the screensaver. Empty in slides cached before it was kept. */
+    val id: String = "",
+)
 
 /** What the home screen shows from Jellyfin. Kept on disk too, to show while the server does not answer. */
 @Serializable
@@ -291,6 +299,8 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
                     recursive = true,
                     includeItemTypes = listOf(BaseItemKind.MOVIE),
                     imageTypes = listOf(ImageType.BACKDROP),
+                    // Only what nobody has watched yet: the screensaver doubles as «what could we watch».
+                    isPlayed = false,
                     fields = CARD_FIELDS,
                     sortBy = listOf(ItemSortBy.RANDOM),
                     limit = limit,
@@ -310,7 +320,7 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
                 item.runTimeTicks?.let { formatMinutes(it / TICKS_PER_MS / 60_000) },
                 item.communityRating?.let { "★ ${formatScore(it)}" },
             ).joinToString(" · ")
-            ScreensaverSlide(item.name.orEmpty(), meta, overview, backdrop, poster)
+            ScreensaverSlide(item.name.orEmpty(), meta, overview, backdrop, poster, item.id.toString())
         }.also { if (it.isNotEmpty()) save(slidesCache, it) }
     }
 

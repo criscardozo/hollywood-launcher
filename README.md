@@ -32,7 +32,7 @@ unos 300 MB de esa memoria y llenan la pantalla de publicidad. Este repo tiene t
 - **Detalle de películas y series**, como el de Jellyfin: continuar, desde el principio, tráiler, reparto
   o episodios, y de dónde se reproduce.
 - **Debajo de las apps:** lo último agregado a Jellyfin, más videos de YouTube, todos los fijados y la
-  fila «Tele» (PlayStation 5, Entradas, Ajustes, Salvapantallas).
+  fila «Tele» (PlayStation 5, Entradas, Ajustes, Salvapantallas, Reiniciar).
 - **Salvapantallas** con películas al azar de Jellyfin: fondo, póster, título y sinopsis.
 - **Si el servidor de Jellyfin está apagado**, sigue mostrando lo último que cargó.
 - **Botones del control:** Netflix, TCL Channel y compañía pueden abrir otras apps.

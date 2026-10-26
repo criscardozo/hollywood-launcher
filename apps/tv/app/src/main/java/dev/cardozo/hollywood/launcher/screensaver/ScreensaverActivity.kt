@@ -8,7 +8,8 @@ import android.view.WindowManager
 
 /**
  * The screensaver on demand, from Home's «Salvapantallas» tile: an app cannot start a dream (that takes a
- * system permission), so this shows the same [FilmShow] in an activity. Like the dream, any key ends it.
+ * system permission), so this shows the same [FilmShow] in an activity. Like the dream, OK opens the film
+ * on screen and any other key ends it.
  */
 class ScreensaverActivity : Activity() {
 
@@ -42,8 +43,12 @@ class ScreensaverActivity : Activity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Swallow the press and close on its release, so the key does not also act on Home underneath.
+        if (event.isVolume()) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN) pressed = true
-        else if (event.action == KeyEvent.ACTION_UP && pressed) finish()
+        else if (event.action == KeyEvent.ACTION_UP && pressed) {
+            show.current?.takeIf { event.isOk() && it.id.isNotEmpty() }?.let { openFilm(it) }
+            finish()
+        }
         return true
     }
 

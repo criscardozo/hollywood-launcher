@@ -1,10 +1,12 @@
 package dev.cardozo.hollywood.launcher.screensaver
 
 import android.service.dreams.DreamService
+import android.view.KeyEvent
 
 /**
  * The screensaver: [FilmShow] as a dream. It replaces Google's ambient screensaver (dreamx, ~100 MB)
- * once it is chosen in the TV's settings (`screensaver_components`).
+ * once it is chosen in the TV's settings (`screensaver_components`). Interactive, so OK can open the film
+ * on screen; any other key ends it, as a plain screensaver would.
  */
 class ClockDream : DreamService() {
 
@@ -12,7 +14,7 @@ class ClockDream : DreamService() {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        isInteractive = false
+        isInteractive = true
         isFullscreen = true
         // Full brightness: the films are the point now. The clock-only version dimmed the screen.
         isScreenBright = true
@@ -33,5 +35,15 @@ class ClockDream : DreamService() {
         show?.release()
         show = null
         super.onDetachedFromWindow()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.isVolume()) return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_UP) {
+            val film = show?.current?.takeIf { event.isOk() && it.id.isNotEmpty() }
+            if (film != null) openFilm(film)
+            finish()
+        }
+        return true
     }
 }

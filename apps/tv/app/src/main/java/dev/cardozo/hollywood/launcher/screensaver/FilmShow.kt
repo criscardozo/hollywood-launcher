@@ -31,7 +31,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
-private const val SLIDE_EVERY_MS = 20_000L
+private const val SLIDE_EVERY_MS = 10_000L
 private const val FADE_MS = 1_500L
 /** Without films to show, plain backdrops at the old, slower pace. */
 private const val BACKDROP_EVERY_MS = 45_000L
@@ -41,7 +41,7 @@ private const val SKIP_MS = 300L
 private const val ZOOM = 1.08f
 
 /**
- * Random films from the Jellyfin library, one every 20 s (layout B of docs/mockups/salvapantallas.html):
+ * Random unwatched films from the Jellyfin library, one every 10 s (layout B of docs/mockups/salvapantallas.html):
  * the backdrop full screen with a slow zoom, the poster, title, facts and overview at the bottom left,
  * and the clock at the top right. Text and clock drift a few pixels so nothing burns in. Without
  * Jellyfin it is just the clock on black. Plain views and one coroutine, so it costs little.
@@ -60,7 +60,12 @@ class FilmShow(private val context: Context) {
     private val meta: TextView
     private val overview: TextView
     private val clock: TextClock
+    private val hint: TextView
     val view: View
+
+    /** The film on screen, for OK: its details page. Null until the first one shows. */
+    var current: ScreensaverSlide? = null
+        private set
 
     init {
         // Dark at the bottom, where the text is; clear from a little above the middle.
@@ -85,12 +90,14 @@ class FilmShow(private val context: Context) {
         title = text(36f, Color.argb(255, 242, 243, 245), bold = true).apply { maxLines = 2 }
         meta = text(13f, Color.argb(190, 242, 243, 245)).apply { maxLines = 1 }
         overview = text(12.5f, Color.argb(190, 242, 243, 245)).apply { maxLines = 2; setLineSpacing(0f, 1.3f) }
+        hint = text(11f, Color.argb(130, 242, 243, 245)).apply { maxLines = 1; text = "OK para ver la película" }
         val texts = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.BOTTOM
             addView(title)
             addView(meta, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
             addView(overview, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            addView(hint, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
         }
         info = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -214,7 +221,9 @@ class FilmShow(private val context: Context) {
     /** Swaps the text and poster with a short fade, a few pixels away from where the last one was. */
     private fun showInfo(slide: ScreensaverSlide, posterImage: Drawable?) {
         info.animate().alpha(0f).setDuration(500).withEndAction {
+            current = slide
             title.text = slide.title
+            hint.visibility = if (slide.id.isNotEmpty()) View.VISIBLE else View.GONE
             meta.text = slide.meta
             overview.text = slide.overview
             poster.setImageDrawable(posterImage)

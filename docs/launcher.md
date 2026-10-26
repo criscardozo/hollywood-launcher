@@ -50,7 +50,7 @@ página de configuración; se actualiza cada media hora mientras Home está en p
 **Última fila, «Tele»:** PlayStation 5 (pasa directo a HDMI 2: la entrada
 `com.tcl.tvinput/.TvPassThroughService/HW16`, que abre `com.tcl.tv`), Entradas (selector de HDMI de TCL,
 `com.android.tv.action.VIEW_INPUTS`), Ajustes (los de la tele), Salvapantallas (abre el nuestro en el
-momento, para probarlo; cualquier tecla lo cierra) y, mientras Hollywood no sea el inicio,
+momento, para probarlo), Reiniciar (pregunta antes; ver abajo) y, mientras Hollywood no sea el inicio,
 **Usar como inicio**: el diálogo de Android para elegir la app de inicio (rol HOME), o los ajustes de
 inicio si el sistema no lo ofrece. En el emulador, elegirlo funcionó; el launcher de Google, si sigue
 habilitado, puede seguir abriendo pantallas suyas (desactivarlo es la fase B del debloat).
@@ -94,13 +94,22 @@ clasificación de Australia. Back vuelve a la misma tarjeta. Los videos de YouTu
 OK los reproduce.
 
 **Salvapantallas** (`ClockDream`, diseño B de `docs/mockups/salvapantallas.html`): una película al
-azar de Jellyfin cada 20 s, con fundido. El fondo de la película a pantalla completa con un zoom lento,
+azar de Jellyfin cada 10 s, con fundido. El fondo de la película a pantalla completa con un zoom lento,
 y abajo a la izquierda el póster, el título, año · género · duración · puntaje y la sinopsis. El reloj va
 arriba a la derecha. Texto y reloj se corren unos píxeles para que nada quede marcado en la pantalla.
 Sin películas con póster y sinopsis, vuelven los fondos solos cada 45 s; sin Jellyfin, solo el reloj.
 La vista es `FilmShow`, compartida por el sueño de Android (`ClockDream`, el que arranca la tele) y por
 `ScreensaverActivity`, que abre la ficha «Salvapantallas»: una app no puede arrancar un sueño. Para que
-la tele use el nuestro hay que elegirlo en `screensaver_components` (hoy sigue el de Google, `dreamx`).
+la tele use el nuestro hay que elegirlo en `screensaver_components` (elegido desde el 2026-10-26).
+Sólo muestra películas no vistas, una cada 10 s. OK abre la página de esa película en Hollywood (con
+«Reproducir» en Wholphin); cualquier otra tecla lo cierra y el volumen pasa de largo.
+
+**Reiniciar:** una app no puede reiniciar la tele (`REBOOT` es del sistema, y el receptor
+`REBOOT_DEVICE` de los ajustes de TCL pide un permiso privilegiado). La tele deja adb por red abierto en
+el puerto 5555 (TCL lo prende en cada arranque; Ginebra lo usa), así que el launcher se conecta por adb a
+sí misma con [dadb](https://github.com/mobile-dev-inc/dadb) y una clave propia (`files/adb/`) y manda
+`reboot`. La primera vez la tele pregunta si permite la depuración: con «Permitir siempre» no vuelve a
+preguntar. Si falla, el diálogo ofrece Ajustes → Sistema → Reiniciar.
 
 ## Configuración
 

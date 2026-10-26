@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.open
 import dev.cardozo.hollywood.launcher.details.DetailsScreen
+import dev.cardozo.hollywood.launcher.screensaver.filmToOpen
 import dev.cardozo.hollywood.launcher.home.AllAppsScreen
 import dev.cardozo.hollywood.launcher.home.HomeScreen
 import dev.cardozo.hollywood.launcher.home.HomeViewModel
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent.filmToOpen()?.let { details = it }
         setContent {
             LauncherTheme {
                 val settings by homeViewModel.settings.collectAsState()
@@ -74,11 +76,12 @@ class MainActivity : ComponentActivity() {
         homeViewModel.refresh()
     }
 
-    /** The Home key while the launcher is already in front: back to the dock. */
+    /** The Home key while the launcher is already in front: back to the dock. Or a film from the screensaver. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         screen = Screen.HOME
-        details = null
-        focusDockSignal++
+        // OK on the screensaver: that film's details page over Home, focus left where it was.
+        details = intent.filmToOpen()
+        if (details == null) focusDockSignal++
     }
 }

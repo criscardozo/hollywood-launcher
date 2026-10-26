@@ -234,6 +234,8 @@ fun HomeScreen(
     val pageFocus = remember { FocusRequester() }
     val tvRow = remember { BringIntoViewRequester() }
     var tvRowFocused by remember { mutableStateOf(false) }
+    var askReboot by remember { mutableStateOf(false) }
+    if (askReboot) RebootDialog(onDismiss = { askReboot = false })
     // Back from what a TV tile opened (settings, the screensaver), focus is still on the tile but the page may
     // have moved while Home was away: show the row again.
     LaunchedEffect(onScreen) {
@@ -412,6 +414,7 @@ fun HomeScreen(
                     SystemTile("Ajustes", "⚙", modifier = Modifier.focusRequester(settingsTile)) { context.openSettings() }
                     // Our screensaver on demand, to try it without waiting for the TV to go idle.
                     SystemTile("Salvapantallas", "☾") { context.start(Intent(context, ScreensaverActivity::class.java)) }
+                    SystemTile("Reiniciar", "↻") { askReboot = true }
                     if (!isDefaultHome) {
                         SystemTile("Usar como inicio", "⌂") {
                             val dialog = context.requestDefaultHomeIntent()

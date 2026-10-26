@@ -49,6 +49,8 @@ dependencies {
     runtimeOnly(libs.slf4j.nop)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    // adb to the TV itself, for the Reiniciar tile: an app cannot reboot the TV any other way.
+    implementation(libs.dadb)
     implementation(libs.kotlinx.serialization.json)
     // Settings page and API on the LAN (docs/launcher.md), so no secret ever lives in the code.
     implementation(libs.nanohttpd)
