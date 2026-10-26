@@ -16,6 +16,11 @@ producto y el mismo build que esta tele, ajustada a lo que decidió Cristian el 
 
 ## Fases
 
+**Aplicadas las dos el 2026-10-26**, con un backup previo de paquetes y ajustes en
+`baseline/2026-10-26-pre-debloat/` (local; `RESTORE.md` ahí dice cómo volver atrás). El salvapantallas
+pasó a ser el nuestro (`screensaver_components` → `ClockDream`) antes de desactivar el de Google. Home
+abre Hollywood, comprobado con el control. Memoria libre: 614 MB antes, 782 MB enseguida después.
+
 **A: `debloat/hollywood.txt`**, sin tocar el launcher. Rastreo (Samba TV, analítica TCL, logs),
 promos y canales de TCL, instalación automática de apps, modo demo y hotel, Alexa, Chromecast,
 Asistente, y las apps que no se usan (Netflix, Stan, YouTube Music, Google TV). Se aplica en tandas
