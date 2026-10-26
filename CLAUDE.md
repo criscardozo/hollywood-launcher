@@ -31,6 +31,10 @@ Docs are in Spanish (Cristian reads them); code, comments and commit messages ar
 
 - Everything builds locally. No CI workflows for this repo (macOS runners cost money).
 - Launcher: `make tv-build`, `make tv-run` against the `tv-gtv-31` emulator (Google TV, API 31).
+  The TV gets the release build: `make tv-install`. Installing kills Home and Android brings the previous
+  task (e.g. YouTube) to the front: press Home afterwards only with Cristian's OK.
+- Home is GPU-bound on the TV (PowerVR BXE-4-32): keep full-screen layers cached, no Modifier.alpha on
+  cards (offscreen buffer each), no per-frame animations while idle. Measure with `dumpsys gfxinfo … framestats`.
   Gradle runs on Android Studio's JDK (`JAVA_HOME` is set in the Makefile).
 - iOS: `make ios-build` for the simulator. Free Apple account: re-sign on the phone every 7 days.
 - Mac: `make mac-build`, `make mac-run`.

@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -46,13 +46,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -293,7 +294,6 @@ fun HomeScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Background)
             .onPreviewKeyEvent {
                 if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val wakingUp = showing != null && it.key in Arrows
@@ -307,25 +307,6 @@ fun HomeScreen(
         // Not every YouTube video has a maxres thumbnail: the card's image stands in for a missing backdrop.
         val backdrops = listOfNotNull(heroItem?.backdropUrl, heroItem?.cardImageUrl).ifEmpty { listOfNotNull(wallpaper) }
         Backdrop(backdrops)
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to Background.copy(alpha = 0.94f),
-                    0.34f to Background.copy(alpha = 0.70f),
-                    0.68f to Background.copy(alpha = 0.05f),
-                ),
-            ),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to Background.copy(alpha = 0.55f),
-                    0.18f to Color.Transparent,
-                    0.4f to Color.Transparent,
-                    1f to Background.copy(alpha = 0.98f),
-                ),
-            ),
-        )
 
         // On TV devices Compose scrolls every focus change to a fixed pivot. That made the rows slide on each
         // key press and the page dip down before toTop() pulled it back: scroll only when something is hidden.
@@ -435,25 +416,64 @@ fun HomeScreen(
     }
 }
 
+/** The backdrop sits under dark scrims: 1280×720 looks the same as 1080p there. */
+private const val BACKDROP_WIDTH = 1280
+private const val BACKDROP_HEIGHT = 720
+
+/**
+ * The focused item's backdrop under its two scrims. Each backdrop is drawn once, scrims included, into a layer
+ * of its own; every frame after that (a focus move, the hero's bar) costs one copy of that layer instead of four
+ * full-screen passes, which the TV's small GPU took ~55 ms over. A new backdrop fades in over the old one
+ * by blending the two finished layers, so the fade is cheap too.
+ */
 @Composable
 private fun Backdrop(urls: List<String>) {
     val context = LocalContext.current
-    // The next backdrop is loaded before it replaces the current one, so the crossfade goes from image to
-    // image. Crossfading on the URL faded the old one out to black while the new one was still loading.
+    // The next backdrop is loaded before it replaces the current one, so the fade goes from image to image.
+    // Fading on the URL faded the old one out to black while the new one was still loading.
     var shown by remember { mutableStateOf<coil3.Image?>(null) }
+    var previous by remember { mutableStateOf<coil3.Image?>(null) }
+    val fade = remember { Animatable(1f) }
     LaunchedEffect(urls) {
         // Moving quickly along a row cancels this, so only the backdrop where the focus stops is loaded.
         if (urls.isNotEmpty()) delay(150)
         val loader = SingletonImageLoader.get(context)
         // The first that loads; none (or no URL) falls back to the gradient instead of keeping the last one.
-        shown = urls.firstNotNullOfOrNull { url ->
-            (loader.execute(ImageRequest.Builder(context).data(url).build()) as? SuccessResult)?.image
+        val next = urls.firstNotNullOfOrNull { url ->
+            // Never bigger than it is drawn, whatever the URL serves (Jellyfin's are 1280 wide already).
+            val request = ImageRequest.Builder(context).data(url).size(BACKDROP_WIDTH, BACKDROP_HEIGHT).build()
+            (loader.execute(request) as? SuccessResult)?.image
+        }
+        if (next === shown) return@LaunchedEffect
+        previous = shown
+        shown = next
+        try {
+            fade.snapTo(0f)
+            fade.animateTo(1f, tween(400))
+        } finally {
+            previous = null
         }
     }
-    Crossfade(targetState = shown, animationSpec = tween(600), label = "backdrop") { current ->
-        if (current != null) {
+    Box(Modifier.fillMaxSize()) {
+        if (previous != null || fade.value < 1f) BackdropLayer(previous) { 1f }
+        BackdropLayer(shown) { fade.value }
+    }
+}
+
+/** One backdrop and its scrims, in a cached layer; [alpha] is read while drawing only, so fading never redraws it. */
+@Composable
+private fun BackdropLayer(image: coil3.Image?, alpha: () -> Float) {
+    val context = LocalContext.current
+    Box(
+        Modifier.fillMaxSize().graphicsLayer {
+            this.alpha = alpha()
+            compositingStrategy = CompositingStrategy.Offscreen
+        },
+    ) {
+        if (image != null) {
+            Box(Modifier.fillMaxSize().background(Background))
             Image(
-                painter = remember(current) { current.asPainter(context) },
+                painter = remember(image) { image.asPainter(context) },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -465,6 +485,25 @@ private fun Backdrop(urls: List<String>) {
                 ),
             )
         }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(
+                    0f to Background.copy(alpha = 0.94f),
+                    0.34f to Background.copy(alpha = 0.70f),
+                    0.68f to Background.copy(alpha = 0.05f),
+                ),
+            ),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Background.copy(alpha = 0.55f),
+                    0.18f to Color.Transparent,
+                    0.4f to Color.Transparent,
+                    1f to Background.copy(alpha = 0.98f),
+                ),
+            ),
+        )
     }
 }
 
@@ -559,7 +598,7 @@ fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaIte
             MediaCard(
                 item,
                 Modifier
-                    .alpha(if (focusedId != null && focusedId != item.id) UNFOCUSED_ALPHA else 1f)
+                    .dimmed(focusedId != null && focusedId != item.id)
                     .onFocusChanged { if (it.isFocused) { focusedId = item.id; onFocusItem(item) } },
                 showing = item.id == showing?.id,
             ) {
@@ -591,7 +630,7 @@ private fun Dock(
                 focused = focusedPackage == app.packageName,
                 modifier = Modifier
                     .then(if (first) Modifier.focusRequester(firstFocus) else Modifier)
-                    .alpha(if (focusedPackage != null && focusedPackage != app.packageName) UNFOCUSED_ALPHA else 1f)
+                    .dimmed(focusedPackage != null && focusedPackage != app.packageName)
                     .onFocusChanged { if (it.isFocused) { focusedPackage = app.packageName; onFocusApp(app) } },
             ) { onOpen(app) }
         }
@@ -615,7 +654,7 @@ private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: 
             PosterCard(
                 item,
                 Modifier
-                    .alpha(if (focusedId != null && focusedId != item.id) UNFOCUSED_ALPHA else 1f)
+                    .dimmed(focusedId != null && focusedId != item.id)
                     .onFocusChanged { if (it.isFocused) { focusedId = item.id; onFocusItem(item) } },
                 showing = item.id == showing?.id,
             ) {

@@ -52,6 +52,7 @@ Todo se compila en una Mac. No hay CI.
 ```bash
 make tv-emulator      # emulador de Google TV con Android 12, el sistema de la tele
 make tv-run           # compila e instala el launcher en el emulador
+make tv-install       # compila la versión release y la instala en la tele (vía Ginebra)
 make tv-screenshot    # captura del emulador
 make ios-build        # genera el proyecto de Xcode y compila para el simulador
 make mac-run          # compila y abre el control de la barra de menú de la Mac

@@ -1,8 +1,5 @@
 package dev.cardozo.hollywood.launcher.home
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -25,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -37,6 +35,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +73,15 @@ private fun cardBorder() = CardDefaults.border(
 
 /** The rest of a row while one of its cards has focus: a little dimmed, so the focused one stands out. */
 const val UNFOCUSED_ALPHA = 0.45f
+
+/**
+ * [UNFOCUSED_ALPHA] applied to each thing the card draws. Modifier.alpha would draw the card into an
+ * offscreen buffer first, one per dimmed card on every frame, and those are costly on the TV's PowerVR GPU.
+ */
+fun Modifier.dimmed(dim: Boolean) = graphicsLayer {
+    alpha = if (dim) UNFOCUSED_ALPHA else 1f
+    compositingStrategy = CompositingStrategy.ModulateAlpha
+}
 
 @OptIn(ExperimentalFoundationApi::class) // BringIntoViewRequester
 @Composable
@@ -172,16 +181,26 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean 
     }
 }
 
+private const val SHOWING_BAR_STEP_MS = 200L
+
 /** Marks the card the idle hero is showing; it fills up until the hero moves on to the next one. */
 @Composable
 private fun ShowingBar(modifier: Modifier = Modifier) {
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { progress.animateTo(1f, tween(HERO_ROTATE_MS.toInt(), easing = LinearEasing)) }
+    // Five steps a second rather than every frame: each frame redraws the whole screen, and the TV's GPU
+    // would otherwise be busy all the time Home sits idle. At 3 dp tall nobody sees the steps.
+    val progress = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = System.currentTimeMillis()
+        while (progress.floatValue < 1f) {
+            delay(SHOWING_BAR_STEP_MS)
+            progress.floatValue = ((System.currentTimeMillis() - start) / HERO_ROTATE_MS.toFloat()).coerceAtMost(1f)
+        }
+    }
     // The fill is drawn, not laid out: reading the animation only while drawing keeps it from recomposing
     // and measuring every frame for as long as Home sits idle.
     Box(
         modifier.fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.45f)).drawBehind {
-            drawRect(Color.White, size = size.copy(width = size.width * progress.value))
+            drawRect(Color.White, size = size.copy(width = size.width * progress.floatValue))
         },
     )
 }

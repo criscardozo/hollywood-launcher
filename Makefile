@@ -5,9 +5,10 @@ JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
 ADB      := $(SDK)/platform-tools/adb
 AVD      ?= tv-gtv-31
 APK      := apps/tv/app/build/outputs/apk/debug/app-debug.apk
+RELEASE  := apps/tv/app/build/outputs/apk/release/app-release.apk
 export JAVA_HOME
 
-.PHONY: tv-build tv-emulator tv-run tv-screenshot ios-project ios-build mac-build mac-run
+.PHONY: tv-build tv-release tv-install tv-emulator tv-run tv-screenshot ios-project ios-build mac-build mac-run
 
 ## Launcher (apps/tv)
 
@@ -17,6 +18,15 @@ tv-build:
 # Google TV on Android 12, the same system as the TV.
 tv-emulator:
 	$(SDK)/emulator/emulator -avd $(AVD) -no-snapshot-save -no-boot-anim
+
+# The TV gets the release build: R8-optimised and not debuggable, so Compose runs a good deal smoother on its
+# small CPU. Signed with the debug key, so it installs over a debug build and back.
+tv-release:
+	cd apps/tv && ./gradlew -q assembleRelease
+
+tv-install: tv-release
+	tools/tv install -r $(RELEASE)
+	ssh ginebra adb kill-server
 
 tv-run: tv-build
 	$(ADB) -e install -r $(APK)
