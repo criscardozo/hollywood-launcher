@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -123,7 +125,12 @@ private const val JELLYFIN_RETRY_MS = 2 * 60_000L
 const val HERO_ROTATE_MS = 8_000L
 
 /** The interface's own default: the smallest scroll that makes the focused item fully visible. */
-internal val ScrollOnlyWhenHidden = object : BringIntoViewSpec {}
+internal val ScrollOnlyWhenHidden = object : BringIntoViewSpec {
+    // No animation: on the TV each animated frame costs ~30-45 ms, so a slide stuttered through a handful of
+    // frames. Jumping straight there is one frame.
+    @Suppress("OVERRIDE_DEPRECATION")
+    override val scrollAnimationSpec: AnimationSpec<Float> = snap()
+}
 
 /**
  * Layout D from docs/mockups/launcher-2.html: a hero with the focused item's info, the top shelf of
@@ -275,7 +282,7 @@ fun HomeScreen(
         toTopJob?.cancel()
         toTopJob = scope.launch {
             delay(50)
-            scroll.animateScrollTo(0)
+            scroll.scrollTo(0)
         }
     }
     val focusBelow: (RowKey, MediaItem) -> Unit = { key, item ->
@@ -419,6 +426,8 @@ fun HomeScreen(
 /** The backdrop sits under dark scrims: 1280×720 looks the same as 1080p there. */
 private const val BACKDROP_WIDTH = 1280
 private const val BACKDROP_HEIGHT = 720
+/** How long focus has to stay on a card before the backdrop follows it. */
+private const val BACKDROP_SETTLE_MS = 350L
 
 /**
  * The focused item's backdrop under its two scrims. Each backdrop is drawn once, scrims included, into a layer
@@ -435,8 +444,9 @@ private fun Backdrop(urls: List<String>) {
     var previous by remember { mutableStateOf<coil3.Image?>(null) }
     val fade = remember { Animatable(1f) }
     LaunchedEffect(urls) {
-        // Moving quickly along a row cancels this, so only the backdrop where the focus stops is loaded.
-        if (urls.isNotEmpty()) delay(150)
+        // Moving along the rows cancels this, so only the backdrop where the focus stops is loaded and drawn:
+        // each new one costs the TV's GPU a full redraw of the layer, which was felt as lag between moves.
+        if (urls.isNotEmpty()) delay(BACKDROP_SETTLE_MS)
         val loader = SingletonImageLoader.get(context)
         // The first that loads; none (or no URL) falls back to the gradient instead of keeping the last one.
         val next = urls.firstNotNullOfOrNull { url ->
@@ -521,8 +531,8 @@ private fun Hero(item: MediaItem?, modifier: Modifier = Modifier) {
             maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 42.sp,
             modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
         )
-        // Movies use the year as subtitle, which meta already starts with.
-        val subtitle = item.subtitle?.takeUnless { item.meta.startsWith(it) }
+        // Left out when meta already says it all: a film's year, a video's channel and age.
+        val subtitle = item.subtitle?.takeUnless { sub -> sub.split(" · ").all { it in item.meta } }
         val meta = listOfNotNull(subtitle, item.meta.ifBlank { null }).joinToString(" · ")
         Text(meta, fontSize = 13.sp, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
         item.overview?.let {
@@ -681,7 +691,7 @@ private fun FollowShowing(list: LazyListState, items: List<MediaItem>, showing: 
         val fullyVisible = card != null && card.offset >= layout.viewportStartOffset &&
             card.offset + card.size <= layout.viewportEndOffset - layout.afterContentPadding
         // One card of context to its left, so it does not sit flush against the edge.
-        if (!fullyVisible) list.animateScrollToItem((index - 1).coerceAtLeast(0))
+        if (!fullyVisible) list.scrollToItem((index - 1).coerceAtLeast(0))
     }
 }
 
