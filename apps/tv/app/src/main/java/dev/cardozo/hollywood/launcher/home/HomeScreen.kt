@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,9 +112,10 @@ private const val IDLE_BEFORE_ROTATING_MS = 10_000L
 private val Arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
 
 /** Which row has focus; with the id of the focused card, what the hero shows. */
-private enum class RowKey { SHELF, NEWS, RECENT, VIDEOS, PINNED, OTHER }
+private enum class RowKey { SHELF, POPULAR, NEWS, RECENT, VIDEOS, PINNED, OTHER }
 
-private data class Focused(val row: RowKey, val id: String)
+/** [region] tells the popular rows apart: the same video can be popular in two countries. */
+private data class Focused(val row: RowKey, val id: String, val region: String = "")
 
 /** A role dialog «answered» faster than this was never shown (Google TV declined it). */
 private const val DIALOG_NOT_SHOWN_MS = 700L
@@ -158,6 +160,7 @@ fun HomeScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val weather by viewModel.weather.collectAsStateWithLifecycle()
     val news by viewModel.news.collectAsStateWithLifecycle()
+    val popular by viewModel.popular.collectAsStateWithLifecycle()
 
     // The shelf follows the app last focused in the dock; the hero follows whatever is focused.
     var shelfApp by remember { mutableStateOf<String?>(null) }
@@ -172,18 +175,19 @@ fun HomeScreen(
     // What has focus, as a row and an id, never a copy of the item: the lists are replaced when Home
     // refreshes (coming back from a player) while focus stays put, and the hero must show the new data.
     var focus by remember { mutableStateOf<Focused?>(null) }
-    fun rowOf(key: RowKey): List<MediaItem> = when (key) {
+    fun rowOf(key: RowKey, region: String = ""): List<MediaItem> = when (key) {
         RowKey.SHELF -> shelfItems
         RowKey.NEWS -> news
+        RowKey.POPULAR -> popular[region].orEmpty()
         RowKey.RECENT -> recent
         RowKey.VIDEOS -> moreVideos
         RowKey.PINNED -> pinned
         RowKey.OTHER -> emptyList()
     }
-    val focusedItem = focus?.let { f -> rowOf(f.row).firstOrNull { it.id == f.id } }
+    val focusedItem = focus?.let { f -> rowOf(f.row, f.region).firstOrNull { it.id == f.id } }
     // The row the hero walks: the focused one, or with the dock focused, that app's shelf. None while focus is
     // on something that is not a card (the TV row, a connect card).
-    val row = focus?.let { rowOf(it.row) } ?: shelfItems
+    val row = focus?.let { rowOf(it.row, it.region) } ?: shelfItems
 
     // Left alone, the hero walks the row so the screen has some movement. Focus never moves, so OK still
     // opens what was chosen; any key brings the hero back. Paused while Home is not on screen.
@@ -214,6 +218,7 @@ fun HomeScreen(
     LaunchedEffect(onScreen) {
         while (onScreen) {
             viewModel.refreshNews()
+            viewModel.refreshPopular()
             // Nothing loaded yet (the network was not up at boot): try again soon rather than in 20 minutes.
             delay(if (news.isEmpty()) JELLYFIN_RETRY_MS else NEWS_EVERY_MS)
         }
@@ -285,9 +290,9 @@ fun HomeScreen(
             scroll.scrollTo(0)
         }
     }
-    val focusBelow: (RowKey, MediaItem) -> Unit = { key, item ->
+    val focusBelow: (RowKey, MediaItem, String) -> Unit = { key, item, region ->
         toTopJob?.cancel()
-        focus = Focused(key, item.id)
+        focus = Focused(key, item.id, region)
     }
     LaunchedEffect(dock.isNotEmpty(), focusDockSignal) {
         if (dock.isNotEmpty()) {
@@ -346,10 +351,17 @@ fun HomeScreen(
                     onAllApps = onAllApps,
                 )
 
+                for ((region, videos) in popular) {
+                    key(region) {
+                        Spacer(Modifier.height(36.dp))
+                        Box(Modifier.padding(start = Edge)) { RowTitle("Populares en ${countryName(region)}", "YouTube") }
+                        MediaRow(videos, showing, onFocusItem = { focusBelow(RowKey.POPULAR, it, region) }, onPlay = play)
+                    }
+                }
                 if (news.isNotEmpty()) {
                     Spacer(Modifier.height(36.dp))
                     Box(Modifier.padding(start = Edge)) { RowTitle("Noticias", NewsChannel.entries.joinToString(" · ") { it.label }) }
-                    MediaRow(news, showing, onFocusItem = { focusBelow(RowKey.NEWS, it) }, onPlay = play)
+                    MediaRow(news, showing, onFocusItem = { focusBelow(RowKey.NEWS, it, "") }, onPlay = play)
                 }
                 // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
                 if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
@@ -365,19 +377,19 @@ fun HomeScreen(
                 if (recent.isNotEmpty()) {
                     Spacer(Modifier.height(36.dp))
                     Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
-                    PosterRow(recent, showing, onFocusItem = { focusBelow(RowKey.RECENT, it) }, onPlay = play)
+                    PosterRow(recent, showing, onFocusItem = { focusBelow(RowKey.RECENT, it, "") }, onPlay = play)
                 }
                 if (moreVideos.isNotEmpty()) {
                     Spacer(Modifier.height(28.dp))
                     Box(Modifier.padding(start = Edge)) {
                         RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
                     }
-                    MediaRow(moreVideos, showing, onFocusItem = { focusBelow(RowKey.VIDEOS, it) }, onPlay = play)
+                    MediaRow(moreVideos, showing, onFocusItem = { focusBelow(RowKey.VIDEOS, it, "") }, onPlay = play)
                 }
                 if (pinned.isNotEmpty()) {
                     Spacer(Modifier.height(28.dp))
                     Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
-                    MediaRow(pinned, showing, onFocusItem = { focusBelow(RowKey.PINNED, it) }, onPlay = play)
+                    MediaRow(pinned, showing, onFocusItem = { focusBelow(RowKey.PINNED, it, "") }, onPlay = play)
                 }
                 // The TV's own screens, last: they used to float in the top bar, where focus could get stuck.
                 Spacer(Modifier.height(28.dp))
@@ -712,3 +724,7 @@ fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
         Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(3.dp).background(Color.White, RoundedCornerShape(2.dp)))
     }
 }
+
+/** «Australia» for AU, in the launcher's Spanish. */
+private fun countryName(region: String): String =
+    java.util.Locale("", region).getDisplayCountry(java.util.Locale.forLanguageTag("es-AR")).ifBlank { region }

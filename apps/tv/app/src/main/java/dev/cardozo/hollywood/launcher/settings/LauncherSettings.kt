@@ -30,11 +30,19 @@ data class Settings(
     val weatherPlace: String = "",
     val weatherLatitude: Double? = null,
     val weatherLongitude: Double? = null,
+    /**
+     * One row of YouTube's most popular videos per country here, in [POPULAR_REGIONS] order. ISO 3166-1
+     * alpha-2, as YouTube's charts take it. Empty: no popular rows.
+     */
+    val youtubePopularRegions: List<String> = listOf("AU", "AR"),
 ) {
     val youtubeConfigured get() = googleClientId.isNotBlank() && googleClientSecret.isNotBlank()
     val youtubeConnected get() = youtubeConfigured && youtubeRefreshToken.isNotBlank()
     val seerrConfigured get() = seerrUrl.isNotBlank() && seerrApiKey.isNotBlank()
 }
+
+/** The countries the settings page offers for popular rows, in the order the rows appear. */
+val POPULAR_REGIONS = listOf("AU", "AR", "US", "GB", "ES", "MX", "NZ", "CA")
 
 private val Context.dataStore by preferencesDataStore(name = "launcher")
 
@@ -53,6 +61,7 @@ class LauncherSettings(private val context: Context) {
         val weatherPlace = stringPreferencesKey("weather_place")
         val weatherLatitude = stringPreferencesKey("weather_latitude")
         val weatherLongitude = stringPreferencesKey("weather_longitude")
+        val youtubePopularRegions = stringPreferencesKey("youtube_popular_regions")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -100,6 +109,11 @@ class LauncherSettings(private val context: Context) {
         it[Keys.weatherLongitude] = longitude.toString()
     }
 
+    /** Kept in [POPULAR_REGIONS] order whatever order they come in, so the rows always sit the same way. */
+    suspend fun setYoutubePopularRegions(regions: List<String>) = context.dataStore.edit { prefs ->
+        prefs[Keys.youtubePopularRegions] = POPULAR_REGIONS.filter { it in regions.map(String::uppercase) }.joinToString(",")
+    }
+
     private fun Preferences.toSettings() = Settings(
         googleClientId = this[Keys.googleClientId].orEmpty(),
         googleClientSecret = this[Keys.googleClientSecret].orEmpty(),
@@ -113,5 +127,7 @@ class LauncherSettings(private val context: Context) {
         weatherPlace = this[Keys.weatherPlace].orEmpty(),
         weatherLatitude = this[Keys.weatherLatitude]?.toDoubleOrNull(),
         weatherLongitude = this[Keys.weatherLongitude]?.toDoubleOrNull(),
+        // Never set: the default rows. Set to nothing (every country unticked): no rows.
+        youtubePopularRegions = this[Keys.youtubePopularRegions]?.split(',')?.filter { it.isNotBlank() } ?: listOf("AU", "AR"),
     )
 }

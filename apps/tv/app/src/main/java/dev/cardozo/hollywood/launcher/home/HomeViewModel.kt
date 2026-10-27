@@ -80,6 +80,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _youtube = MutableStateFlow<YouTubeUi>(YouTubeUi.Loading)
     val youtube: StateFlow<YouTubeUi> = _youtube.asStateFlow()
 
+    private val _popular = MutableStateFlow<Map<String, List<MediaItem>>>(emptyMap())
+    /** A row per country, in the settings' order; a country missing while it has not loaded. */
+    val popular: StateFlow<Map<String, List<MediaItem>>> = _popular.asStateFlow()
+
     private val _news = MutableStateFlow<List<MediaItem>>(emptyList())
     val news: StateFlow<List<MediaItem>> = _news.asStateFlow()
 
@@ -98,6 +102,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         // one extra load at start.
         viewModelScope.launch {
             app.settings.settings.map { it.youtubeConfigured to it.youtubeConnected }.distinctUntilChanged().collect { refreshYouTube() }
+        }
+        viewModelScope.launch {
+            app.settings.settings.map { it.youtubePopularRegions to it.youtubeConnected }
+                .distinctUntilChanged().collect { refreshPopular() }
         }
         viewModelScope.launch {
             app.settings.settings.map { it.weatherLatitude to it.weatherLongitude }.distinctUntilChanged()
@@ -119,6 +127,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         refreshYouTube()
         refreshWeather()
         refreshNews()
+        refreshPopular()
+    }
+
+    /** Home also calls it every 20 minutes while on screen; the repository asks YouTube at most hourly. */
+    fun refreshPopular() {
+        if (popularJob?.isActive == true) return
+        popularJob = viewModelScope.launch {
+            val s = app.settings.current()
+            val regions = if (s.youtubeConnected) s.youtubePopularRegions else emptyList()
+            // Turned off countries go at once; the rest show what is on disk until the fresh rows come.
+            _popular.value = regions.associateWith { region ->
+                _popular.value[region] ?: runCatching { app.youtube.cachedPopular(region) }.getOrNull().orEmpty()
+            }.filterValues { it.isNotEmpty() }
+            for (region in regions) {
+                runCatching { app.youtube.popular(region) }
+                    .onSuccess { row ->
+                        // Rebuilt in the settings' order, so a row loading late does not end up first.
+                        val rows = _popular.value + (region to row.orEmpty())
+                        _popular.value = regions.associateWith { rows[it].orEmpty() }.filterValues { it.isNotEmpty() }
+                    }
+                    .onFailure { Log.w(TAG, "Popular $region failed", it) }
+            }
+        }
     }
 
     /** Home calls it every 20 minutes while it is on screen; the repository caches for as long. */
@@ -157,6 +188,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var jellyfinJob: Job? = null
     private var youtubeJob: Job? = null
     private var newsJob: Job? = null
+    private var popularJob: Job? = null
 
     private fun refreshJellyfin() {
         if (jellyfinJob?.isActive == true) return

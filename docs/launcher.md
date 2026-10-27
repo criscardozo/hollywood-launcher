@@ -29,6 +29,8 @@ las filas del B debajo.
 │ └──────┘ └──────┘ └──────┘                                       │
 │ [YouTube] [Wholphin] [Prime] [Disney+] [Max] … [Todas las apps]  │
 ├───────────── al bajar, la página sube ───────────────────────────┤
+│ Populares en Australia · Populares en Argentina (YouTube)        │
+│ Noticias (7NEWS · 9News · 10 News · ABC · SBS)                   │
 │ Agregado recientemente (Jellyfin, pósters)                       │
 │ Más de tus suscripciones (YouTube)                               │
 │ Fijados (Prime Video · Disney+ · Max)                            │
@@ -171,6 +173,15 @@ código. Solo pide `youtube.readonly`. Hace falta un cliente OAuth propio:
 Cuota: la lista de suscripciones cuesta 1 unidad cada 50 canales (se renueva cada 6 h); los videos
 salen del feed RSS público de cada canal (sin cuota); duraciones y vistas, 1 unidad cada 50 videos.
 Muy por debajo de las 10.000 diarias. Los Shorts se descartan.
+
+**Populares:** una fila por país con lo más visto en YouTube (`videos.list` con `chart=mostPopular`,
+1 unidad por país y por hora). Los países se eligen en la página de configuración, en un orden fijo
+(Australia y Argentina por defecto); sin países, no hay filas. Necesita la cuenta conectada. YouTube no
+ofrece por API los recomendados personales (se sacaron en 2016), por eso son los populares del país.
+
+Las filas de YouTube (suscripciones, populares, noticias) guardan lo último que cargaron en disco: al
+arrancar aparecen enseguida y, si los feeds no responden (pasa: todos los canales en 404 durante horas),
+siguen con lo guardado.
 
 ## Fijados (Prime Video, Disney+, Max)
 

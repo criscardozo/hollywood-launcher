@@ -31,6 +31,9 @@ private const val SUBSCRIPTIONS_TTL_MS = 6 * 60 * 60_000L
 private const val VIDEOS_TTL_MS = 20 * 60_000L
 private const val MAX_AGE_DAYS = 30L
 private const val MAX_VIDEOS = 40
+/** The charts move slowly: once an hour is plenty, at one unit of quota each. */
+private const val POPULAR_TTL_MS = 60 * 60_000L
+private const val POPULAR_MAX = 30
 
 @Serializable private data class Page<T>(val items: List<T> = emptyList(), val nextPageToken: String? = null)
 @Serializable private data class Subscription(val snippet: SubscriptionSnippet)
@@ -39,6 +42,22 @@ private const val MAX_VIDEOS = 40
 @Serializable private data class Video(val id: String, val contentDetails: ContentDetails? = null, val statistics: Statistics? = null)
 @Serializable private data class ContentDetails(val duration: String? = null)
 @Serializable private data class Statistics(val viewCount: String? = null)
+@Serializable private data class PopularVideo(
+    val id: String,
+    val snippet: PopularSnippet,
+    val contentDetails: ContentDetails? = null,
+    val statistics: Statistics? = null,
+)
+@Serializable private data class PopularSnippet(
+    val title: String,
+    val channelTitle: String,
+    val publishedAt: String,
+    val description: String? = null,
+)
+
+/** The last popular row, for the region and account it was asked for. */
+@Serializable
+private data class SavedPopular(val account: Int, val region: String, val videos: List<SavedVideo>)
 
 internal data class FeedEntry(
     val videoId: String,
@@ -82,6 +101,15 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
     // Feeds go down now and then (every channel answering 404 for hours): the row keeps its last good list,
     // also across a restart of the launcher.
     private val saved = JsonFile(File(filesDir, "youtube-videos.json"), SavedVideos.serializer())
+    private val filesDir = filesDir
+    private val loadingPopular = Mutex()
+    /** Per region: the account hash it was loaded for, when, and the row. */
+    private val popular = mutableMapOf<String, Triple<Int, Long, List<MediaItem>>>()
+    private val savedPopular = mutableMapOf<String, JsonFile<SavedPopular>>()
+
+    private fun savedPopular(region: String) = savedPopular.getOrPut(region) {
+        JsonFile(File(filesDir, "youtube-popular-$region.json"), SavedPopular.serializer())
+    }
     /** The refresh token the in-memory lists were loaded with. */
     private var account: String? = null
     private var channelsAtMs = 0L
@@ -93,6 +121,54 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
      * valid sign-in (Google expires it after 7 days while the OAuth app is in "Testing") it keeps going
      * with the saved channels; only durations and views are missing then.
      */
+    /** The last popular row for [region] that loaded, from disk; null when there is none for it. */
+    suspend fun cachedPopular(region: String): List<MediaItem>? {
+        val account = settings.current().youtubeRefreshToken.hashCode()
+        return savedPopular(region).read()?.takeIf { it.account == account && it.region == region }
+            ?.videos?.map { it.toMediaItem() }?.ifEmpty { null }
+    }
+
+    /**
+     * YouTube's most popular videos in [region] (videos.list with chart=mostPopular: one unit of quota),
+     * Shorts left out. Needs the sign-in; null without it. Cached for an hour, and on disk for when YouTube
+     * does not answer.
+     */
+    suspend fun popular(region: String): List<MediaItem>? = withContext(Dispatchers.IO) {
+        loadingPopular.withLock {
+            val s = settings.current()
+            val account = s.youtubeRefreshToken.hashCode()
+            val now = System.currentTimeMillis()
+            val last = popular[region]?.takeIf { it.first == account && it.third.isNotEmpty() }
+            if (last != null && now - last.second < POPULAR_TTL_MS) return@withLock last.third
+            val token = runCatching { auth.accessToken() }.getOrNull() ?: return@withLock null
+            val url = "$API/videos".toHttpUrl().newBuilder()
+                .addQueryParameter("part", "snippet,contentDetails,statistics")
+                .addQueryParameter("chart", "mostPopular")
+                .addQueryParameter("regionCode", region)
+                .addQueryParameter("maxResults", POPULAR_MAX.toString())
+                .build()
+            val items = try {
+                Http.json.decodeFromString<Page<PopularVideo>>(Http.get(authorized(url.toString(), token))).items
+            } catch (e: Exception) {
+                return@withLock last?.third ?: cachedPopular(region) ?: throw e
+            }
+            val kept = items.mapNotNull { video ->
+                val duration = video.contentDetails?.duration?.let(::parseDuration)
+                if (duration != null && duration <= Duration.ofSeconds(60)) return@mapNotNull null
+                val published = runCatching { OffsetDateTime.parse(video.snippet.publishedAt).toInstant() }.getOrNull()
+                    ?: return@mapNotNull null
+                SavedVideo(
+                    video.id, video.snippet.title, video.snippet.channelTitle, published.toEpochMilli(),
+                    video.snippet.description, duration?.seconds, video.statistics?.viewCount?.toLongOrNull(),
+                )
+            }
+            val row = kept.map { it.toMediaItem() }
+            popular[region] = Triple(account, now, row)
+            if (kept.isNotEmpty()) savedPopular(region).write(SavedPopular(account, region, kept))
+            row
+        }
+    }
+
     /** The last list that loaded, from disk, for Home to show while it asks for a fresh one. */
     suspend fun cached(): List<MediaItem>? {
         val account = settings.current().youtubeRefreshToken.hashCode()

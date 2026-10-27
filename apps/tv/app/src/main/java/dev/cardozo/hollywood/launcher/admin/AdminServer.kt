@@ -12,6 +12,7 @@ import dev.cardozo.hollywood.launcher.pins.PinsRepository
 import dev.cardozo.hollywood.launcher.pins.SeerrClient
 import dev.cardozo.hollywood.launcher.remote.RemoteKeys
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
+import dev.cardozo.hollywood.launcher.settings.POPULAR_REGIONS
 import dev.cardozo.hollywood.launcher.weather.WeatherRepository
 import dev.cardozo.hollywood.launcher.youtube.YouTubeAuth
 import dev.cardozo.hollywood.launcher.youtube.YouTubeRepository
@@ -49,6 +50,7 @@ private val MEDIA_TYPES = setOf("movie", "tv")
 /** Google's sign-in as the page sees it: [state] is idle, waiting, connected or failed. */
 @Serializable private data class YouTubeConnect(val state: String, val url: String? = null, val code: String? = null, val error: String? = null)
 @Serializable private data class PlayerBody(val player: String)
+@Serializable private data class PopularBody(val regions: List<String>)
 @Serializable private data class YouTubeCheck(val videos: Int?, val sample: List<String>, val error: String?)
 @Serializable private data class KeyBody(val keyCode: Int, val packageName: String)
 @Serializable private data class AppInfo(val packageName: String, val label: String)
@@ -63,6 +65,7 @@ private data class Status(
     val player: String,
     val pins: Int,
     val weatherPlace: String,
+    val youtubePopularRegions: List<String>,
 )
 @Serializable private data class Error(val error: String)
 
@@ -200,6 +203,16 @@ class AdminServer(
                     reply(status())
                 }
 
+                uri == "/api/youtube/popular" && method == Method.POST -> {
+                    val body = json.decodeFromString<PopularBody>(body(session))
+                    // Only the countries the page offers.
+                    if (body.regions.any { it.uppercase() !in POPULAR_REGIONS }) {
+                        return@runBlocking reply(Response.Status.BAD_REQUEST, Error("País inválido"))
+                    }
+                    settings.setYoutubePopularRegions(body.regions)
+                    reply(status())
+                }
+
                 uri == "/api/player" && method == Method.POST -> {
                     val body = json.decodeFromString<PlayerBody>(body(session))
                     settings.setPlayer(Player.valueOf(body.player))
@@ -312,6 +325,7 @@ class AdminServer(
             player = s.player.name,
             pins = pins.list().size,
             weatherPlace = s.weatherPlace,
+            youtubePopularRegions = s.youtubePopularRegions,
         )
     }
 

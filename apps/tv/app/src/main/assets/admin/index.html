@@ -13,6 +13,9 @@
   h2 { font-size: 17px; margin: 0 0 12px; }
   p.lead { color: var(--dim); margin: 0 0 24px; }
   section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .checks label { display: flex; align-items: center; gap: 6px; color: var(--fg); margin: 4px 0; }
+  .checks input { width: auto; }
   label { display: block; font-size: 13px; color: var(--dim); margin: 10px 0 4px; }
   input, select { width: 100%; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: #0f1116; color: var(--fg); font: inherit; }
   button { margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 9px; background: var(--fg); color: #111; font: inherit; font-weight: 600; cursor: pointer; }
@@ -85,6 +88,18 @@
         <button class="ghost" onclick="copyCode()">Copiar código</button>
       </div>
       <div class="msg" id="ytMsg"></div>
+      <label>Filas «Populares»: lo más visto en YouTube por país, arriba de todo en el inicio, en este orden</label>
+      <div id="popular" class="checks">
+        <label><input type="checkbox" value="AU" onchange="savePopular()"> Australia</label>
+        <label><input type="checkbox" value="AR" onchange="savePopular()"> Argentina</label>
+        <label><input type="checkbox" value="US" onchange="savePopular()"> Estados Unidos</label>
+        <label><input type="checkbox" value="GB" onchange="savePopular()"> Reino Unido</label>
+        <label><input type="checkbox" value="ES" onchange="savePopular()"> España</label>
+        <label><input type="checkbox" value="MX" onchange="savePopular()"> México</label>
+        <label><input type="checkbox" value="NZ" onchange="savePopular()"> Nueva Zelanda</label>
+        <label><input type="checkbox" value="CA" onchange="savePopular()"> Canadá</label>
+      </div>
+      <div class="msg" id="popularMsg"></div>
       <details style="margin-top:14px">
         <summary>Cliente de Google</summary>
         <p>Cliente OAuth de Google Cloud del tipo <b>TVs and Limited Input devices</b>, con la YouTube Data API v3 habilitada. Hace falta una sola vez, antes de conectar.</p>
@@ -197,6 +212,7 @@ async function load() {
   if (!s.youtubeConfigured) document.querySelector("details").open = true;
   if (!$("jfUrl").value) findJellyfin();
   $("player").value = s.player;
+  document.querySelectorAll("#popular input").forEach(c => c.checked = s.youtubePopularRegions.includes(c.value));
   await loadPins();
   await loadKeys();
 }
@@ -284,6 +300,13 @@ async function pickPlace(i) {
 async function saveSeerr() {
   try { await api("/api/seerr", { method: "POST", body: JSON.stringify({ url: $("seerrUrl").value, apiKey: $("seerrKey").value }) }); relock("seerr"); msg("seerrMsg", "Funciona."); load(); }
   catch (e) { msg("seerrMsg", "No funcionó: " + e.message, false); }
+}
+async function savePopular() {
+  try {
+    const regions = [...document.querySelectorAll("#popular input:checked")].map(c => c.value);
+    await api("/api/youtube/popular", { method: "POST", body: JSON.stringify({ regions }) });
+    msg("popularMsg", "Guardado. La tele lo muestra en unos segundos.");
+  } catch (e) { msg("popularMsg", e.message, false); }
 }
 async function savePlayer() {
   try { await api("/api/player", { method: "POST", body: JSON.stringify({ player: $("player").value }) }); msg("playerMsg", "Guardado."); }
