@@ -56,7 +56,13 @@ inicio si el sistema no lo ofrece. En el emulador, elegirlo funcionó; el launch
 habilitado, puede seguir abriendo pantallas suyas (desactivarlo es la fase B del debloat).
 
 **Foco:** diseño B de `docs/mockups/foco.html`: anillo blanco separado de la tarjeta, el resto de la
-fila atenuado, y el nombre de lo enfocado más grande.
+fila atenuado, y el nombre de lo enfocado más grande. Sin zoom de la tarjeta (desde el 2026-10-27): en la
+tele, cada cuadro de esa animación costaba ~30 ms y se sentía como lag.
+
+**Rendimiento en la tele:** la placa de video (PowerVR BXE-4-32) es el límite, no el procesador. Por eso
+el fondo y sus degradados van en una capa guardada, las tarjetas se atenúan sin capas aparte, los
+desplazamientos son instantáneos y nada se anima cuadro a cuadro con Home quieto. Medido con
+`dumpsys gfxinfo … framestats` (scripts en `.local/perf/`, locales).
 
 **Fondo:** la imagen de lo enfocado; si no, fondos al azar de la biblioteca de Jellyfin, que cambian
 cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la tarjeta.

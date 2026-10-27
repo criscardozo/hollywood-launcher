@@ -71,6 +71,12 @@ private fun cardBorder() = CardDefaults.border(
     focusedBorder = Border(BorderStroke(3.dp, Color.White), inset = FOCUS_GAP, shape = CardShape),
 )
 
+/**
+ * Focus does not enlarge a card: on the TV the zoom took ~10 frames of ~30 ms each per move, felt as lag. The
+ * white ring and the dimmed rest of the row show focus on their own.
+ */
+private val NoZoom @Composable get() = CardDefaults.scale(focusedScale = 1f)
+
 /** The rest of a row while one of its cards has focus: a little dimmed, so the focused one stands out. */
 const val UNFOCUSED_ALPHA = 0.45f
 
@@ -102,7 +108,7 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean =
         Card(
             onClick = onClick,
             shape = CardDefaults.shape(CardShape),
-            scale = CardDefaults.scale(focusedScale = 1.08f),
+            scale = NoZoom,
             border = cardBorder(),
             colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
             modifier = Modifier.size(180.dp, 101.dp),
@@ -163,7 +169,7 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean 
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
-        scale = CardDefaults.scale(focusedScale = 1.08f),
+        scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
         modifier = Modifier.size(98.dp, 147.dp),
@@ -211,7 +217,7 @@ fun AppTile(app: TvApp, focused: Boolean, modifier: Modifier = Modifier, nameBel
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
-        scale = CardDefaults.scale(focusedScale = 1.12f),
+        scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
         modifier = modifier.size(108.dp, 61.dp),
@@ -236,7 +242,7 @@ fun AllAppsTile(onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
-        scale = CardDefaults.scale(focusedScale = 1.08f),
+        scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
         modifier = Modifier.size(108.dp, 61.dp),
@@ -257,7 +263,7 @@ fun ActionCard(
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
-        scale = CardDefaults.scale(focusedScale = 1.04f),
+        scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.size(380.dp, 101.dp),
@@ -303,7 +309,7 @@ fun SystemTile(label: String, symbol: String? = null, icon: Painter? = null, mod
     Card(
         onClick = onClick,
         shape = CardDefaults.shape(CardShape),
-        scale = CardDefaults.scale(focusedScale = 1.08f),
+        scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
         modifier = modifier.size(150.dp, 61.dp),
