@@ -56,6 +56,7 @@ make tv-install       # compila la versión release y la instala en la tele (ví
 make tv-screenshot    # captura del emulador
 make ios-build        # genera el proyecto de Xcode y compila para el simulador
 make mac-run          # compila y abre el control de la barra de menú de la Mac
+make mac-install      # versión Release en /Applications/Hollywood.app, y la abre
 
 tools/debloat.sh status debloat/hollywood.txt   # estado de los paquetes en la tele
 ```

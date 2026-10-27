@@ -8,7 +8,7 @@ APK      := apps/tv/app/build/outputs/apk/debug/app-debug.apk
 RELEASE  := apps/tv/app/build/outputs/apk/release/app-release.apk
 export JAVA_HOME
 
-.PHONY: tv-build tv-release tv-install tv-emulator tv-run tv-screenshot ios-project ios-build mac-build mac-run
+.PHONY: tv-build tv-release tv-install tv-emulator tv-run tv-screenshot ios-project ios-build mac-build mac-run mac-install
 
 ## Launcher (apps/tv)
 
@@ -46,12 +46,26 @@ ios-build: ios-project
 
 ## Mac menu-bar remote (apps/ios/HollywoodMenu, same XcodeGen project)
 
-MAC_APP := /tmp/hollywood-menu/Build/Products/Debug/HollywoodMenu.app
+# Built under apps/ios/build (gitignored), not /tmp: macOS empties /tmp on restart, and the app (and its
+# login item) went with it.
+MAC_DERIVED := apps/ios/build/mac
+MAC_APP := $(MAC_DERIVED)/Build/Products/Debug/HollywoodMenu.app
+MAC_RELEASE := $(MAC_DERIVED)/Build/Products/Release/HollywoodMenu.app
 
 mac-build: ios-project
 	cd apps/ios && xcodebuild -project HollywoodRemote.xcodeproj -scheme HollywoodMenu \
-		-destination 'platform=macOS' -derivedDataPath /tmp/hollywood-menu -allowProvisioningUpdates -quiet build
+		-destination 'platform=macOS' -derivedDataPath $(MAC_DERIVED) -allowProvisioningUpdates -quiet build
 
 mac-run: mac-build
 	pkill -x HollywoodMenu || true
 	open $(MAC_APP)
+
+# The Release build, installed as /Applications/Hollywood.app and opened. Its login item (Abrir al iniciar
+# sesión, in the panel's ⋯ menu) points at this copy.
+mac-install: ios-project
+	cd apps/ios && xcodebuild -project HollywoodRemote.xcodeproj -scheme HollywoodMenu -configuration Release \
+		-destination 'platform=macOS' -derivedDataPath build/mac -allowProvisioningUpdates -quiet build
+	pkill -x HollywoodMenu || true
+	rm -rf /Applications/Hollywood.app
+	ditto $(MAC_RELEASE) /Applications/Hollywood.app
+	open /Applications/Hollywood.app

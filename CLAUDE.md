@@ -37,7 +37,7 @@ Docs are in Spanish (Cristian reads them); code, comments and commit messages ar
   cards (offscreen buffer each), no per-frame animations while idle. Measure with `dumpsys gfxinfo … framestats`.
   Gradle runs on Android Studio's JDK (`JAVA_HOME` is set in the Makefile).
 - iOS: `make ios-build` for the simulator. Free Apple account: re-sign on the phone every 7 days.
-- Mac: `make mac-build`, `make mac-run`.
+- Mac: `make mac-build`, `make mac-run`; `make mac-install` puts the Release build in /Applications/Hollywood.app.
 
 ## Conventions
 
