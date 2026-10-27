@@ -25,8 +25,8 @@ class LauncherApplication : Application(), SingletonImageLoader.Factory {
     val installedApps by lazy { InstalledApps(this) }
     val jellyfin by lazy { JellyfinRepository(this, JellyfinSessionStore(this)) }
     val youtubeAuth by lazy { YouTubeAuth(settings) }
-    val youtube by lazy { YouTubeRepository(youtubeAuth, settings) }
-    val news by lazy { NewsRepository() }
+    val youtube by lazy { YouTubeRepository(youtubeAuth, settings, filesDir) }
+    val news by lazy { NewsRepository(filesDir) }
     val pins by lazy { PinsRepository(settings) }
     val seerr by lazy { SeerrClient(settings) }
     val weather by lazy { WeatherRepository(settings) }

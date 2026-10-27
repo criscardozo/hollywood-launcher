@@ -125,6 +125,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshNews() {
         if (newsJob?.isActive == true) return
         newsJob = viewModelScope.launch {
+            // At start (the TV restarted, the launcher was killed): the last row from disk at once.
+            if (_news.value.isEmpty()) _news.value = runCatching { app.news.cached() }.getOrDefault(emptyList())
             // A failed refresh keeps the row as it was; with nothing loaded yet the row just does not show.
             runCatching { app.news.latest() }
                 .onSuccess { _news.value = it }
@@ -198,7 +200,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val savedChannels = s.youtubeChannels.isNotEmpty()
             if (!s.youtubeConfigured && !savedChannels) { _youtube.value = YouTubeUi.NotConfigured; return@launch }
             if (!s.youtubeConnected && !savedChannels) { _youtube.value = YouTubeUi.NotConnected; return@launch }
-            if (_youtube.value !is YouTubeUi.Ready) _youtube.value = YouTubeUi.Loading
+            if (_youtube.value !is YouTubeUi.Ready) {
+                _youtube.value = runCatching { app.youtube.cached() }.getOrNull()?.let { YouTubeUi.Ready(it) } ?: YouTubeUi.Loading
+            }
             _youtube.value = try {
                 app.youtube.latest()?.let { YouTubeUi.Ready(it) } ?: YouTubeUi.NotConnected
             } catch (e: Exception) {

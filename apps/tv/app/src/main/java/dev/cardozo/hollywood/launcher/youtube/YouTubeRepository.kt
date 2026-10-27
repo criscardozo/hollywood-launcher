@@ -4,6 +4,7 @@ import android.util.Xml
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.content.Source
 import dev.cardozo.hollywood.launcher.net.Http
+import dev.cardozo.hollywood.launcher.net.JsonFile
 import dev.cardozo.hollywood.launcher.settings.LauncherSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -18,6 +19,7 @@ import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
+import java.io.File
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -47,14 +49,39 @@ internal data class FeedEntry(
     val isShort: Boolean,
 )
 
+/** A video as kept on disk: what the feed and videos.list said, so ages are worked out again when read. */
+@Serializable
+internal data class SavedVideo(
+    val videoId: String,
+    val title: String,
+    val channel: String,
+    val publishedMs: Long,
+    val description: String? = null,
+    val durationSeconds: Long? = null,
+    val views: Long? = null,
+) {
+    fun entry() = FeedEntry(videoId, title, channel, Instant.ofEpochMilli(publishedMs), description, isShort = false)
+    fun toMediaItem() = entry().toMediaItem(durationSeconds?.let(Duration::ofSeconds), views)
+}
+
+internal fun FeedEntry.saved(duration: Duration? = null, views: Long? = null) =
+    SavedVideo(videoId, title, channel, published.toEpochMilli(), description, duration?.seconds, views)
+
+/** The last good list, tied to the account it was loaded with (a hash of its refresh token, not the token). */
+@Serializable
+private data class SavedVideos(val account: Int, val videos: List<SavedVideo>)
+
 /**
  * New videos from the channels Cristian is subscribed to. Quota-light by design: the subscription list
  * comes from the YouTube Data API (one unit per 50 channels, refreshed every 6 h); the uploads come from
  * each channel's public RSS feed (no quota); one videos.list call adds durations and views.
  */
-class YouTubeRepository(private val auth: YouTubeAuth, private val settings: LauncherSettings) {
+class YouTubeRepository(private val auth: YouTubeAuth, private val settings: LauncherSettings, filesDir: File) {
 
     private val loading = Mutex()
+    // Feeds go down now and then (every channel answering 404 for hours): the row keeps its last good list,
+    // also across a restart of the launcher.
+    private val saved = JsonFile(File(filesDir, "youtube-videos.json"), SavedVideos.serializer())
     /** The refresh token the in-memory lists were loaded with. */
     private var account: String? = null
     private var channelsAtMs = 0L
@@ -66,6 +93,12 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
      * valid sign-in (Google expires it after 7 days while the OAuth app is in "Testing") it keeps going
      * with the saved channels; only durations and views are missing then.
      */
+    /** The last list that loaded, from disk, for Home to show while it asks for a fresh one. */
+    suspend fun cached(): List<MediaItem>? {
+        val account = settings.current().youtubeRefreshToken.hashCode()
+        return saved.read()?.takeIf { it.account == account }?.videos?.map { it.toMediaItem() }?.ifEmpty { null }
+    }
+
     suspend fun latest(force: Boolean = false): List<MediaItem>? = withContext(Dispatchers.IO) {
         // Home (twice at start) and the settings page can ask at once: one load, the others reuse it.
         loading.withLock { load(force) }
@@ -101,6 +134,7 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
         // Not one feed answered (the internet is down): keep the last good list rather than empty the row.
         if (channels.isNotEmpty() && fetched.all { it == null }) {
             if (videos.isNotEmpty()) return videos
+            cached()?.let { return it }
             throw IOException("No se pudo leer ningún canal")
         }
         val entries = fetched.filterNotNull().flatten()
@@ -108,14 +142,16 @@ class YouTubeRepository(private val auth: YouTubeAuth, private val settings: Lau
             .sortedByDescending { it.published }
             .take(MAX_VIDEOS)
         val details = if (token != null) details(token, entries.map { it.videoId }) else emptyMap()
-        videos = entries.mapNotNull { entry ->
+        val kept = entries.mapNotNull { entry ->
             val video = details[entry.videoId]
             val duration = video?.contentDetails?.duration?.let(::parseDuration)
             // Shorts that the feed does not mark as such: anything up to a minute.
             if (duration != null && duration <= Duration.ofSeconds(60)) return@mapNotNull null
-            entry.toMediaItem(duration, video?.statistics?.viewCount?.toLongOrNull())
+            entry.saved(duration, video?.statistics?.viewCount?.toLongOrNull())
         }
+        videos = kept.map { it.toMediaItem() }
         videosAtMs = now
+        if (kept.isNotEmpty()) saved.write(SavedVideos(s.youtubeRefreshToken.hashCode(), kept))
         return videos
     }
 
