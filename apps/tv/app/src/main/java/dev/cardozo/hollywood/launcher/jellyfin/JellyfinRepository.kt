@@ -36,6 +36,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.QuickConnectDto
@@ -288,7 +289,10 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
         }
     }
 
-    /** Random films with a backdrop, a poster and an overview, for the screensaver. Empty when not connected. */
+    /**
+     * The films added last, newest first, with a backdrop, a poster and an overview, for the screensaver.
+     * Empty when not connected.
+     */
     suspend fun screensaverSlides(limit: Int = 40): List<ScreensaverSlide> = withContext(Dispatchers.IO) {
         val session = store.session.first() ?: return@withContext emptyList()
         val api = jellyfin.createApi(baseUrl = session.baseUrl, accessToken = session.accessToken)
@@ -302,13 +306,14 @@ class JellyfinRepository(context: Context, private val store: JellyfinSessionSto
                     // Only what nobody has watched yet: the screensaver doubles as «what could we watch».
                     isPlayed = false,
                     fields = CARD_FIELDS,
-                    sortBy = listOf(ItemSortBy.RANDOM),
+                    sortBy = listOf(ItemSortBy.DATE_CREATED),
+                    sortOrder = listOf(SortOrder.DESCENDING),
                     limit = limit,
                 ),
             ).content.items
         } catch (e: Exception) {
             Log.i(TAG, "Screensaver from the cache: the server did not answer", e)
-            return@withContext read<List<ScreensaverSlide>>(slidesCache).orEmpty().shuffled()
+            return@withContext read<List<ScreensaverSlide>>(slidesCache).orEmpty()
         }
         items.mapNotNull { item ->
             val overview = item.overview?.takeIf { it.isNotBlank() } ?: return@mapNotNull null

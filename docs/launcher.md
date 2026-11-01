@@ -101,8 +101,8 @@ instalada para Prime Video, Disney+ y Max. Los datos de los fijados salen de TMD
 clasificación de Australia. Back vuelve a la misma tarjeta. Los videos de YouTube no tienen detalle:
 OK los reproduce.
 
-**Salvapantallas** (`ClockDream`, diseño B de `docs/mockups/salvapantallas.html`): una película al
-azar de Jellyfin cada 10 s, con fundido. El fondo de la película a pantalla completa con un zoom lento,
+**Salvapantallas** (`ClockDream`, diseño B de `docs/mockups/salvapantallas.html`): las últimas
+40 películas sin ver agregadas a Jellyfin, de la más nueva a la más vieja, una cada 10 s, con fundido. El fondo de la película a pantalla completa con un zoom lento,
 y abajo a la izquierda el póster, el título, año · género · duración · puntaje y la sinopsis. El reloj va
 arriba a la derecha. Texto y reloj se corren unos píxeles para que nada quede marcado en la pantalla.
 Sin películas con póster y sinopsis, vuelven los fondos solos cada 45 s; sin Jellyfin, solo el reloj.

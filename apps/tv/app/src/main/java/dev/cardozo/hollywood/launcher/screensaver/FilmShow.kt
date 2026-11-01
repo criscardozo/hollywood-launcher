@@ -41,7 +41,7 @@ private const val SKIP_MS = 300L
 private const val ZOOM = 1.08f
 
 /**
- * Random unwatched films from the Jellyfin library, one every 10 s (layout B of docs/mockups/salvapantallas.html):
+ * The unwatched films added last to the Jellyfin library, newest first, one every 10 s (layout B of docs/mockups/salvapantallas.html):
  * the backdrop full screen with a slow zoom, the poster, title, facts and overview at the bottom left,
  * and the clock at the top right. Text and clock drift a few pixels so nothing burns in. Without
  * Jellyfin it is just the clock on black. Plain views and one coroutine, so it costs little.
@@ -149,7 +149,7 @@ class FilmShow(private val context: Context) {
         var i = 0
         var failures = 0
         while (scope.isActive) {
-            // Each round through the list asks for a new random batch, so it does not repeat in the same order.
+            // Each round through the list asks again, so films added meanwhile join in.
             if (i > 0 && i % slides.size == 0) slides = films().ifEmpty { slides }
             val slide = slides[i % slides.size]
             val backdrop = load(slide.backdropUrl, 1920, 1080)
