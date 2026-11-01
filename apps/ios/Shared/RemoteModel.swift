@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import RemoteKit
 #if canImport(UIKit)
 import UIKit
@@ -42,7 +43,10 @@ final class RemoteModel {
     private var codeContinuation: CheckedContinuation<String, Error>?
     private let defaults = UserDefaults.standard
 
+    nonisolated static let logger = Logger(subsystem: "dev.cardozo.hollywood", category: "remote")
+
     init() {
+        RemoteSession.log = { Self.logger.info("\($0, privacy: .public)") }
         host = defaults.string(forKey: "host")
         tvName = defaults.string(forKey: "tvName")
         if host != nil { phase = .connecting }
@@ -103,6 +107,7 @@ final class RemoteModel {
             adopt(session)
         } catch {
             guard !Task.isCancelled else { return }
+            Self.logger.info("connect failed: \(String(describing: error), privacy: .public)")
             phase = .failed(Self.explain(error))
         }
     }
@@ -118,11 +123,25 @@ final class RemoteModel {
                 self?.state = state
             }
             // The stream ends when the TV closes the connection, or when the session gives up on a
-            // silent one (RemoteSession.silenceLimit).
+            // silent one (RemoteSession.silenceLimit). Usually the TV is still there (it restarted its
+            // remote service, the Wi-Fi hiccuped): reconnect quietly and only report a failure if that
+            // does not work either.
             guard let self, self.session === session else { return }
             self.session = nil
-            self.phase = .failed("Se cortó la conexión con la tele")
+            await self.reconnect()
         }
+    }
+
+    /// After a dropped session: a few quick attempts, spaced out, before showing «Sin conexión».
+    private func reconnect() async {
+        for wait in [0, 1, 3] {
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !Task.isCancelled, session == nil, host != nil else { return }
+            Self.logger.info("reconnecting after a drop")
+            await connectIfNeeded()
+            if phase == .connected { return }
+        }
+        if case .failed = phase { phase = .failed("Se cortó la conexión con la tele") }
     }
 
     /// The TV closes the TLS handshake when it does not know our certificate; that is the common case.

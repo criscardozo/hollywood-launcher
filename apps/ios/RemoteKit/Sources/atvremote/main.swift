@@ -23,6 +23,7 @@ let rest = Array(args.dropFirst(2))
 let env = ProcessInfo.processInfo.environment
 /// The TV's key fingerprint saved when pairing; later connections must match it.
 let pinPath = env["ATV_PIN"] ?? ".local/atvremote.pin"
+RemoteSession.log = { print("\(Date()) \($0)") }
 
 func identity() throws -> ClientIdentity {
     try ClientIdentity.pem(
@@ -60,9 +61,9 @@ func run() async throws {
         case "text":
             session.type(rest.joined(separator: " "))
         default:
-            let deadline = Date().addingTimeInterval(30)
+            let deadline = Date().addingTimeInterval(Double(env["ATV_WATCH"] ?? "30") ?? 30)
             for await state in session.updates {
-                print(state)
+                print("\(Date()) \(state)")
                 if Date() > deadline { break }
             }
         }

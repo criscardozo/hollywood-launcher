@@ -24,6 +24,8 @@ public struct RemoteState: Sendable, Equatable {
 public final class RemoteSession: @unchecked Sendable {
     public static let port: UInt16 = 6466
     public static let silenceLimit: Duration = .seconds(15)
+    /// Where the session reports why it ended and how the TV's messages are spaced; nil stays quiet.
+    nonisolated(unsafe) public static var log: (@Sendable (String) -> Void)?
 
     private let channel: Channel
     private let features: RemoteFeatures
@@ -75,10 +77,17 @@ public final class RemoteSession: @unchecked Sendable {
             guard let self else { return }
             do {
                 for try await data in channel.messages {
-                    lock.withLock { lastHeard = .now }
+                    let gap = lock.withLock { () -> Duration in
+                        defer { lastHeard = .now }
+                        return ContinuousClock.now - lastHeard
+                    }
+                    if gap > .seconds(7) { Self.log?("quiet for \(gap)") }
                     if handle(data) { ready.continuation.yield() }
                 }
-            } catch {}
+                Self.log?("the TV closed the connection")
+            } catch {
+                Self.log?("connection error: \(error)")
+            }
             lock.withLock { watchdog }?.cancel()
             update { $0.connected = false }
             ready.continuation.finish()
@@ -90,6 +99,7 @@ public final class RemoteSession: @unchecked Sendable {
                 guard let self else { return }
                 let silence = lock.withLock { ContinuousClock.now - lastHeard }
                 if silence > Self.silenceLimit {
+                    Self.log?("nothing from the TV for \(silence), closing")
                     channel.close()
                     return
                 }
