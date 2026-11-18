@@ -2,7 +2,6 @@ package dev.cardozo.hollywood.launcher.screensaver
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -21,6 +20,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import dev.cardozo.hollywood.launcher.jellyfin.ScreensaverSlide
 import dev.cardozo.hollywood.launcher.launcherApp
+import dev.cardozo.hollywood.launcher.ui.setRedHat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -110,7 +110,7 @@ class FilmShow(private val context: Context) {
             format12Hour = "HH:mm"
             format24Hour = "HH:mm"
             textSize = 32f
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            setRedHat(300)
             setTextColor(Color.argb(220, 242, 243, 245))
             setShadowLayer(12f, 0f, 2f, Color.argb(160, 0, 0, 0))
         }
@@ -239,7 +239,7 @@ class FilmShow(private val context: Context) {
     private fun text(sizeSp: Float, color: Int, bold: Boolean = false) = TextView(context).apply {
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
         setTextColor(color)
-        typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+        setRedHat(if (bold) 800 else 500)
         ellipsize = TextUtils.TruncateAt.END
         setShadowLayer(10f, 0f, 2f, Color.argb(140, 0, 0, 0))
     }

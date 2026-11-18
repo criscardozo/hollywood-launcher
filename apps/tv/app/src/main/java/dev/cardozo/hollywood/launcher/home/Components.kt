@@ -52,6 +52,7 @@ import coil3.compose.AsyncImage
 import dev.cardozo.hollywood.launcher.apps.TvApp
 import dev.cardozo.hollywood.launcher.content.MediaItem
 import dev.cardozo.hollywood.launcher.ui.Dim
+import dev.cardozo.hollywood.launcher.ui.Faint
 import dev.cardozo.hollywood.launcher.weather.Weather
 import dev.cardozo.hollywood.launcher.ui.Foreground
 import kotlinx.coroutines.delay
@@ -144,12 +145,13 @@ fun MediaCard(item: MediaItem, modifier: Modifier = Modifier, showing: Boolean =
         }
         Text(
             // The focused card's title a little larger, so it reads as the one selected.
-            item.title, fontSize = if (focused) 12.5.sp else 11.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold, color = Foreground,
+            item.title, fontSize = if (focused) 13.sp else 12.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
+            color = if (focused) Foreground else Dim,
             // Clear of the focus ring, which sits outside the scaled card.
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 11.dp),
         )
         item.subtitle?.let {
-            Text(it, fontSize = 9.5.sp, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(it, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, color = Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -220,7 +222,7 @@ fun AppTile(app: TvApp, focused: Boolean, modifier: Modifier = Modifier, nameBel
         scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color(0xFF1A1C22)),
-        modifier = modifier.size(108.dp, 61.dp),
+        modifier = modifier.size(116.dp, 65.dp),
     ) {
         Image(
             bitmap = app.art,
@@ -232,7 +234,7 @@ fun AppTile(app: TvApp, focused: Boolean, modifier: Modifier = Modifier, nameBel
     // The name of the focused app; the space is always there so the row does not jump.
     if (nameBelow) Text(
         app.label, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Foreground, maxLines = 1,
-        modifier = Modifier.padding(top = 10.dp).alpha(if (focused) 1f else 0f),
+        modifier = Modifier.padding(top = 9.dp).alpha(if (focused) 1f else 0f),
     )
     }
 }
@@ -245,10 +247,10 @@ fun AllAppsTile(onClick: () -> Unit) {
         scale = NoZoom,
         border = cardBorder(),
         colors = CardDefaults.colors(containerColor = Color.White.copy(alpha = 0.10f)),
-        modifier = Modifier.size(108.dp, 61.dp),
+        modifier = Modifier.size(116.dp, 65.dp),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Todas las apps", fontSize = 11.sp, color = Foreground)
+            Text("Todas las apps", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Foreground)
         }
     }
 }
@@ -292,14 +294,21 @@ fun TopBar(weather: Weather?, notice: String?, modifier: Modifier = Modifier) {
                     .padding(horizontal = 12.dp, vertical = 5.dp),
             )
         }
-        if (weather != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(weather.symbol, fontSize = 17.sp)
-                Spacer(Modifier.width(5.dp))
-                Text("${weather.temperature}°", fontSize = 19.sp, fontWeight = FontWeight.Medium, color = Foreground)
+        // On a dark pill of their own: a video's thumbnail can be bright and full of lettering right behind them.
+        Row(
+            Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50)).padding(horizontal = 14.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (weather != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(weather.symbol, fontSize = 14.sp)
+                    Spacer(Modifier.width(5.dp))
+                    Text("${weather.temperature}°", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Dim)
+                }
             }
+            Clock(fontSize = 21)
         }
-        Clock(fontSize = 24)
     }
 }
 
@@ -318,7 +327,7 @@ fun SystemTile(label: String, symbol: String? = null, icon: Painter? = null, mod
             if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             if (symbol != null) Text(symbol, fontSize = 15.sp, color = Foreground)
             Spacer(Modifier.width(8.dp))
-            Text(label, fontSize = 12.sp, color = Foreground)
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Foreground)
         }
     }
 }

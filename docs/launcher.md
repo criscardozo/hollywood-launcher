@@ -66,8 +66,18 @@ el fondo y sus degradados van en una capa guardada, las tarjetas se atenúan sin
 desplazamientos son instantáneos y nada se anima cuadro a cuadro con Home quieto. Medido con
 `dumpsys gfxinfo … framestats` (scripts en `.local/perf/`, locales).
 
-**Fondo:** la imagen de lo enfocado; si no, fondos al azar de la biblioteca de Jellyfin, que cambian
-cada 3 minutos. Si un video de YouTube no tiene miniatura grande, usa la de la tarjeta.
+**Aspecto** (diseño A de `docs/mockups/estilos.html`, elegido el 2026-11-18): el hero (fuente, título,
+datos en pastillas con el puntaje primero, y resumen) queda fijo arriba; solo las filas se desplazan
+debajo, y la fila con foco sube hasta quedar pegada al hero con su título. Así lo enfocado siempre tiene
+su título e imagen a la vista. Cada fila pide su lugar (`showRow`); el foco por sí solo no mueve la página.
+
+**Fondo:** la imagen de lo enfocado a la derecha, detrás de una máscara fija, igual para una película
+que para un video de YouTube o de noticias; el texto queda siempre sobre color liso. Si un video no tiene
+miniatura grande, usa la de la tarjeta. Sin nada enfocado, un fondo al azar de la biblioteca de Jellyfin,
+que cambia cada 3 minutos.
+
+**Tipografía:** Red Hat Display (licencia OFL, en `apps/tv/licenses/`), elegida en
+`docs/mockups/fuentes.html`. Es la única de la app: inicio, ficha, todas las apps y salvapantallas.
 
 **Sin tocar el control:** a los 10 s el hero recorre solo la fila enfocada, uno cada 8 s, y la tarjeta
 que muestra tiene una barra que se llena. El foco no se mueve: OK abre lo que elegiste y cualquier

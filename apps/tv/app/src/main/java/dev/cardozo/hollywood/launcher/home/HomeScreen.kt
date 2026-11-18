@@ -63,11 +63,14 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -103,6 +106,7 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Left edge of the content; rows pad their own content so a focused, scaled card is not clipped. */
 private val Edge = 48.dp
@@ -134,9 +138,18 @@ internal val ScrollOnlyWhenHidden = object : BringIntoViewSpec {
     override val scrollAnimationSpec: AnimationSpec<Float> = snap()
 }
 
+/** The vertical page never moves on a focus change by itself: each row asks for its place (showRow). */
+private val NeverScroll = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = 0f
+}
+
+/** Where the rows start: everything above is the hero, which does not scroll. */
+private val RowsTop = 240.dp
+
 /**
- * Layout D from docs/mockups/launcher-2.html: a hero with the focused item's info, the top shelf of
- * the app focused in the dock, the dock, and rows below it. Designed at 960×540 dp (the TV's 1080p).
+ * Layout D from docs/mockups/launcher-2.html in the look of design A of docs/mockups/estilos.html: a hero with
+ * the focused item's info that stays put, and under it the rows, which scroll: the top shelf of the app focused
+ * in the dock, the dock, and the rest. Designed at 960×540 dp (the TV's 1080p).
  */
 @OptIn(ExperimentalFoundationApi::class) // LocalBringIntoViewSpec
 @Composable
@@ -242,10 +255,21 @@ fun HomeScreen(
         if (it.source == Source.YOUTUBE) context.open(it, settings.player) else onOpenDetails(it)
     }
 
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    // Where each row starts inside the page, by name: the row with focus goes to the top of the rows' area, its
+    // title included. The shelf and the dock are the top of the page (no name).
+    val anchors = remember { HashMap<String, Int>() }
+    val anchor: (String) -> Modifier = { id -> Modifier.onPlaced { anchors[id] = it.positionInParent().y.roundToInt() } }
+    var scrollJob by remember { mutableStateOf<Job?>(null) }
+    val showRow: (String?) -> Unit = { id ->
+        scrollJob?.cancel()
+        scrollJob = scope.launch { scroll.scrollTo(id?.let { anchors[it] } ?: 0) }
+    }
+
     val dockFocus = remember { FocusRequester() }
     // Back from details: the restorer puts focus on the card that opened it.
     val pageFocus = remember { FocusRequester() }
-    val tvRow = remember { BringIntoViewRequester() }
     var tvRowFocused by remember { mutableStateOf(false) }
     var askReboot by remember { mutableStateOf(false) }
     if (askReboot) RebootDialog(onDismiss = { askReboot = false })
@@ -254,7 +278,7 @@ fun HomeScreen(
     LaunchedEffect(onScreen) {
         if (onScreen && tvRowFocused) {
             delay(100)
-            tvRow.bringIntoView()
+            showRow("tv")
         }
     }
     // «Usar como inicio» shows until Hollywood holds the HOME role; checked again whenever Home comes back.
@@ -277,29 +301,21 @@ fun HomeScreen(
         if (active && !wasActive) runCatching { pageFocus.requestFocus() }
         wasActive = active
     }
-    val scroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    // Back on the shelf or the dock, the page returns to the top so the hero is visible again. The wait lets
-    // the focus change's own bring-into-view scroll finish first; otherwise it wins and the page stays down.
-    // Focus moving on to a lower row cancels it, or it would scroll that row off screen.
-    var toTopJob by remember { mutableStateOf<Job?>(null) }
-    val toTop: () -> Unit = {
-        toTopJob?.cancel()
-        toTopJob = scope.launch {
-            delay(50)
-            scroll.scrollTo(0)
-        }
-    }
-    val focusBelow: (RowKey, MediaItem, String) -> Unit = { key, item, region ->
-        toTopJob?.cancel()
+    val focusBelow: (RowKey, MediaItem, String, String) -> Unit = { key, item, region, row ->
         focus = Focused(key, item.id, region)
+        showRow(row)
+    }
+    // The shelf's title says what the app focused in the dock offers.
+    val shelfTitle = when {
+        shelf is Shelf.Empty -> null
+        shelfApp in Player.packages -> "Seguir viendo" to "Jellyfin"
+        shelfApp == Source.YOUTUBE.packageName -> "Nuevo en tus suscripciones" to "YouTube"
+        else -> Source.forPackage(shelfApp)?.let { "Fijados" to it.label }
     }
     LaunchedEffect(dock.isNotEmpty(), focusDockSignal) {
         if (dock.isNotEmpty()) {
             runCatching { dockFocus.requestFocus() }
-            // Focusing the dock scrolls it into view; Home should always show the page from the top.
-            delay(50)
-            scroll.scrollTo(0)
+            showRow(null)
         }
     }
 
@@ -317,33 +333,35 @@ fun HomeScreen(
             },
     ) {
         // Not every YouTube video has a maxres thumbnail: the card's image stands in for a missing backdrop.
-        val backdrops = listOfNotNull(heroItem?.backdropUrl, heroItem?.cardImageUrl).ifEmpty { listOfNotNull(wallpaper) }
-        Backdrop(backdrops)
+        Backdrop(listOfNotNull(heroItem?.backdropUrl, heroItem?.cardImageUrl).ifEmpty { listOfNotNull(wallpaper) })
+        // The hero stays put and only the rows under it scroll, so whatever has focus keeps its title, facts
+        // and picture on screen.
+        Hero(heroItem, Modifier.padding(start = Edge, top = 50.dp))
 
-        // On TV devices Compose scrolls every focus change to a fixed pivot. That made the rows slide on each
-        // key press and the page dip down before toTop() pulled it back: scroll only when something is hidden.
-        CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
+        // On TV devices Compose scrolls every focus change to a fixed pivot, which made the page slide on each
+        // key press. The page only moves when a row asks (showRow); the rows themselves scroll sideways only
+        // when something is hidden.
+        CompositionLocalProvider(LocalBringIntoViewSpec provides NeverScroll) {
             Column(
-                Modifier.fillMaxSize().focusRequester(pageFocus).focusRestorer().verticalScroll(scroll),
+                Modifier.padding(top = RowsTop).fillMaxSize().focusRequester(pageFocus).focusRestorer().verticalScroll(scroll),
             ) {
-                Hero(heroItem, Modifier.height(244.dp).padding(start = Edge, top = 56.dp))
-
+                // Always as tall as a title, so the shelf does not jump when the dock moves to an app without one.
+                Box(Modifier.padding(start = Edge).height(26.dp)) { shelfTitle?.let { RowTitle(it.first, it.second) } }
                 ShelfRow(
                     shelf = shelf,
                     showing = showing,
-                    onFocusItem = { focus = Focused(RowKey.SHELF, it.id); toTop() },
+                    onFocusItem = { focus = Focused(RowKey.SHELF, it.id); showRow(null) },
                     onPlay = play,
                     onConnectJellyfin = onConnectJellyfin,
                     onConnectYouTube = onConnectYouTube,
                     onOpenSettings = onOpenSettings,
                 )
 
-                Spacer(Modifier.height(20.dp))
                 Dock(
                     apps = dock,
                     firstFocus = dockFocus,
                     onFocusApp = { app ->
-                        toTop()
+                        showRow(null)
                         shelfApp = app.packageName
                         focus = null
                     },
@@ -353,76 +371,89 @@ fun HomeScreen(
 
                 for ((region, videos) in popular) {
                     key(region) {
-                        Spacer(Modifier.height(36.dp))
-                        Box(Modifier.padding(start = Edge)) { RowTitle("Populares en ${countryName(region)}", "YouTube") }
-                        MediaRow(videos, showing, onFocusItem = { focusBelow(RowKey.POPULAR, it, region) }, onPlay = play)
+                        val name = "popular-$region"
+                        Column(anchor(name)) {
+                            Spacer(Modifier.height(RowGap))
+                            Box(Modifier.padding(start = Edge)) { RowTitle("Populares en ${countryName(region)}", "YouTube") }
+                            MediaRow(videos, showing, onFocusItem = { focusBelow(RowKey.POPULAR, it, region, name) }, onPlay = play)
+                        }
                     }
                 }
                 if (news.isNotEmpty()) {
-                    Spacer(Modifier.height(36.dp))
-                    Box(Modifier.padding(start = Edge)) { RowTitle("Noticias", NewsChannel.entries.joinToString(" · ") { it.label }) }
-                    MediaRow(news, showing, onFocusItem = { focusBelow(RowKey.NEWS, it, "") }, onPlay = play)
+                    Column(anchor("news")) {
+                        Spacer(Modifier.height(RowGap))
+                        Box(Modifier.padding(start = Edge)) { RowTitle("Noticias", NewsChannel.entries.joinToString(" · ") { it.label }) }
+                        MediaRow(news, showing, onFocusItem = { focusBelow(RowKey.NEWS, it, "", "news") }, onPlay = play)
+                    }
                 }
                 // With a Jellyfin player in the dock, its shelf already offers to connect: one card is enough.
                 if (jellyfin == JellyfinUi.NotConnected && dock.none { it.packageName in Player.packages }) {
-                    Spacer(Modifier.height(36.dp))
-                    Box(Modifier.padding(start = Edge).onFocusChanged { if (it.hasFocus) focus = Focused(RowKey.OTHER, "") }) {
-                        ActionCard(
-                        title = "Conectar Jellyfin",
-                        subtitle = "Con un código de Quick Connect, sin escribir contraseñas",
-                        onClick = onConnectJellyfin,
-                        )
+                    Column(
+                        anchor("connect").onFocusChanged {
+                            if (it.hasFocus) { focus = Focused(RowKey.OTHER, ""); showRow("connect") }
+                        },
+                    ) {
+                        Spacer(Modifier.height(RowGap))
+                        Box(Modifier.padding(start = Edge)) {
+                            ActionCard(
+                                title = "Conectar Jellyfin",
+                                subtitle = "Con un código de Quick Connect, sin escribir contraseñas",
+                                onClick = onConnectJellyfin,
+                            )
+                        }
                     }
                 }
                 if (recent.isNotEmpty()) {
-                    Spacer(Modifier.height(36.dp))
-                    Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
-                    PosterRow(recent, showing, onFocusItem = { focusBelow(RowKey.RECENT, it, "") }, onPlay = play)
+                    Column(anchor("recent")) {
+                        Spacer(Modifier.height(RowGap))
+                        Box(Modifier.padding(start = Edge)) { RowTitle("Agregado recientemente", "Jellyfin") }
+                        PosterRow(recent, showing, onFocusItem = { focusBelow(RowKey.RECENT, it, "", "recent") }, onPlay = play)
+                    }
                 }
                 if (moreVideos.isNotEmpty()) {
-                    Spacer(Modifier.height(28.dp))
-                    Box(Modifier.padding(start = Edge)) {
-                        RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
+                    Column(anchor("videos")) {
+                        Spacer(Modifier.height(RowGap))
+                        Box(Modifier.padding(start = Edge)) {
+                            RowTitle(if (youtubeInDock) "Más de tus suscripciones" else "Nuevo en tus suscripciones", "YouTube")
+                        }
+                        MediaRow(moreVideos, showing, onFocusItem = { focusBelow(RowKey.VIDEOS, it, "", "videos") }, onPlay = play)
                     }
-                    MediaRow(moreVideos, showing, onFocusItem = { focusBelow(RowKey.VIDEOS, it, "") }, onPlay = play)
                 }
                 if (pinned.isNotEmpty()) {
-                    Spacer(Modifier.height(28.dp))
-                    Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
-                    MediaRow(pinned, showing, onFocusItem = { focusBelow(RowKey.PINNED, it, "") }, onPlay = play)
+                    Column(anchor("pinned")) {
+                        Spacer(Modifier.height(RowGap))
+                        Box(Modifier.padding(start = Edge)) { RowTitle("Fijados", "Prime Video · Disney+ · Max") }
+                        MediaRow(pinned, showing, onFocusItem = { focusBelow(RowKey.PINNED, it, "", "pinned") }, onPlay = play)
+                    }
                 }
                 // The TV's own screens, last: they used to float in the top bar, where focus could get stuck.
-                Spacer(Modifier.height(28.dp))
-                Box(Modifier.padding(start = Edge)) { RowTitle("Tele") }
-                Row(
-                    Modifier
-                        // Focus would only bring the tile itself into view, flush with the bottom of the screen.
-                        .bringIntoViewRequester(tvRow)
-                        .onFocusChanged {
-                            tvRowFocused = it.hasFocus
-                            if (it.hasFocus) {
-                                toTopJob?.cancel()
-                                focus = Focused(RowKey.OTHER, "")
-                                scope.launch { tvRow.bringIntoView() }
-                            }
-                        }
-                        .padding(start = Edge, top = 8.dp, bottom = 28.dp),
-                    horizontalArrangement = Arrangement.spacedBy(13.dp),
+                Column(
+                    anchor("tv").onFocusChanged {
+                        tvRowFocused = it.hasFocus
+                        if (it.hasFocus) { focus = Focused(RowKey.OTHER, ""); showRow("tv") }
+                    },
                 ) {
-                    SystemTile("PlayStation 5", icon = painterResource(R.drawable.playstation)) { context.openInput(PLAYSTATION_INPUT) }
-                    SystemTile("Entradas", "⇄") { context.openInputs() }
-                    SystemTile("Ajustes", "⚙", modifier = Modifier.focusRequester(settingsTile)) { context.openSettings() }
-                    // Our screensaver on demand, to try it without waiting for the TV to go idle.
-                    SystemTile("Salvapantallas", "☾") { context.start(Intent(context, ScreensaverActivity::class.java)) }
-                    SystemTile("Reiniciar", "↻") { askReboot = true }
-                    if (!isDefaultHome) {
-                        SystemTile("Usar como inicio", "⌂") {
-                            val dialog = context.requestDefaultHomeIntent()
-                            if (dialog != null) {
-                                askedAt = System.currentTimeMillis()
-                                askForHome.launch(dialog)
-                            } else {
-                                context.openHomeSettings()
+                    Spacer(Modifier.height(RowGap))
+                    Box(Modifier.padding(start = Edge)) { RowTitle("Tele") }
+                    Row(
+                        Modifier.padding(start = Edge, top = 8.dp, bottom = 28.dp),
+                        horizontalArrangement = Arrangement.spacedBy(13.dp),
+                    ) {
+                        SystemTile("PlayStation 5", icon = painterResource(R.drawable.playstation)) { context.openInput(PLAYSTATION_INPUT) }
+                        SystemTile("Entradas", "⇄") { context.openInputs() }
+                        SystemTile("Ajustes", "⚙", modifier = Modifier.focusRequester(settingsTile)) { context.openSettings() }
+                        // Our screensaver on demand, to try it without waiting for the TV to go idle.
+                        SystemTile("Salvapantallas", "☾") { context.start(Intent(context, ScreensaverActivity::class.java)) }
+                        SystemTile("Reiniciar", "↻") { askReboot = true }
+                        if (!isDefaultHome) {
+                            SystemTile("Usar como inicio", "⌂") {
+                                val dialog = context.requestDefaultHomeIntent()
+                                if (dialog != null) {
+                                    askedAt = System.currentTimeMillis()
+                                    askForHome.launch(dialog)
+                                } else {
+                                    context.openHomeSettings()
+                                }
                             }
                         }
                     }
@@ -431,36 +462,38 @@ fun HomeScreen(
             }
         }
 
-        TopBar(weather, jellyfinNotice, Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 36.dp))
+        TopBar(weather, jellyfinNotice, Modifier.align(Alignment.TopEnd).padding(top = 18.dp, end = 34.dp))
     }
 }
 
-/** The backdrop sits under dark scrims: 1280×720 looks the same as 1080p there. */
+/** Space above each row's title; with the row at the top of the rows' area, how far the title sits from the hero. */
+private val RowGap = 18.dp
+
+/** The art is drawn 640 dp wide: 1280×720 is all of it. */
 private const val BACKDROP_WIDTH = 1280
 private const val BACKDROP_HEIGHT = 720
 /** How long focus has to stay on a card before the backdrop follows it. */
 private const val BACKDROP_SETTLE_MS = 350L
 
 /**
- * The focused item's backdrop under its two scrims. Each backdrop is drawn once, scrims included, into a layer
- * of its own; every frame after that (a focus move, the hero's bar) costs one copy of that layer instead of four
- * full-screen passes, which the TV's small GPU took ~55 ms over. A new backdrop fades in over the old one
- * by blending the two finished layers, so the fade is cheap too.
+ * The focused item's picture, to the right behind a mask, the same for a film and for a video. Each one is drawn
+ * once, masks included, into a layer of its own; every frame after that (a focus move, the hero's bar) costs one
+ * copy of that layer, which is what the TV's small GPU can afford. A new one fades in over the old one by
+ * blending the two finished layers, so the fade is cheap too.
  */
 @Composable
 private fun Backdrop(urls: List<String>) {
     val context = LocalContext.current
-    // The next backdrop is loaded before it replaces the current one, so the fade goes from image to image.
-    // Fading on the URL faded the old one out to black while the new one was still loading.
+    // The next picture is loaded before it replaces the current one, so the fade goes from image to image.
     var shown by remember { mutableStateOf<coil3.Image?>(null) }
     var previous by remember { mutableStateOf<coil3.Image?>(null) }
     val fade = remember { Animatable(1f) }
     LaunchedEffect(urls) {
-        // Moving along the rows cancels this, so only the backdrop where the focus stops is loaded and drawn:
+        // Moving along the rows cancels this, so only the picture where the focus stops is loaded and drawn:
         // each new one costs the TV's GPU a full redraw of the layer, which was felt as lag between moves.
         if (urls.isNotEmpty()) delay(BACKDROP_SETTLE_MS)
         val loader = SingletonImageLoader.get(context)
-        // The first that loads; none (or no URL) falls back to the gradient instead of keeping the last one.
+        // The first that loads; none (or no URL) leaves the plain page instead of keeping the last one.
         val next = urls.firstNotNullOfOrNull { url ->
             // Never bigger than it is drawn, whatever the URL serves (Jellyfin's are 1280 wide already).
             val request = ImageRequest.Builder(context).data(url).size(BACKDROP_WIDTH, BACKDROP_HEIGHT).build()
@@ -482,7 +515,7 @@ private fun Backdrop(urls: List<String>) {
     }
 }
 
-/** One backdrop and its scrims, in a cached layer; [alpha] is read while drawing only, so fading never redraws it. */
+/** One picture in a cached layer; [alpha] is read while drawing only, so fading never redraws it. */
 @Composable
 private fun BackdropLayer(image: coil3.Image?, alpha: () -> Float) {
     val context = LocalContext.current
@@ -490,75 +523,86 @@ private fun BackdropLayer(image: coil3.Image?, alpha: () -> Float) {
         Modifier.fillMaxSize().graphicsLayer {
             this.alpha = alpha()
             compositingStrategy = CompositingStrategy.Offscreen
-        },
+        }.background(Background),
     ) {
-        if (image != null) {
-            Box(Modifier.fillMaxSize().background(Background))
+        if (image == null) return@Box
+        // The art to the right, fading into the page on its left and bottom: the text is always on plain colour.
+        Box(Modifier.align(Alignment.TopEnd).size(640.dp, 360.dp)) {
             Image(
                 painter = remember(image) { image.asPainter(context) },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
+            // Plain for the first stretch, where the hero's text still runs: a video's thumbnail has lettering of its own.
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Background, 0.14f to Background, 0.58f to Color.Transparent)))
             Box(
                 Modifier.fillMaxSize().background(
-                    Brush.linearGradient(listOf(Color(0xFF1B2A4A), Color(0xFF5B3A6B), Color(0xFF0D0B1A))),
+                    Brush.verticalGradient(
+                        // Dark enough along the top for the clock to read over a bright picture.
+                        0f to Background.copy(alpha = 0.72f),
+                        0.26f to Color.Transparent,
+                        0.5f to Color.Transparent,
+                        1f to Background,
+                    ),
                 ),
             )
         }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to Background.copy(alpha = 0.94f),
-                    0.34f to Background.copy(alpha = 0.70f),
-                    0.68f to Background.copy(alpha = 0.05f),
-                ),
-            ),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to Background.copy(alpha = 0.55f),
-                    0.18f to Color.Transparent,
-                    0.4f to Color.Transparent,
-                    1f to Background.copy(alpha = 0.98f),
-                ),
-            ),
-        )
     }
 }
 
+private val ChipShape = RoundedCornerShape(5.dp)
+private val RatingYellow = Color(0xFFF2C94C)
+
 @Composable
 private fun Hero(item: MediaItem?, modifier: Modifier = Modifier) {
-    Column(modifier.width(440.dp)) {
+    Column(modifier.width(456.dp)) {
         if (item == null) return@Column
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(6.dp).background(item.source.color, CircleShape))
-            Spacer(Modifier.width(6.dp))
-            Text(item.source.label.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, color = Foreground)
-        }
-        Text(
-            item.title, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Foreground,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 42.sp,
-            modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
-        )
-        // Left out when meta already says it all: a film's year, a video's channel and age.
-        val subtitle = item.subtitle?.takeUnless { sub -> sub.split(" · ").all { it in item.meta } }
-        val meta = listOfNotNull(subtitle, item.meta.ifBlank { null }).joinToString(" · ")
-        Text(meta, fontSize = 13.sp, color = Dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        item.overview?.let {
+            Spacer(Modifier.width(7.dp))
             Text(
-                it, fontSize = 13.sp, color = Dim, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp),
+                (item.newsChannel?.label ?: item.source.label).uppercase(),
+                fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.14.em, color = Dim,
             )
         }
-        if (item.progress != null) {
-            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                ProgressBar(item.progress, Modifier.width(120.dp))
-                Spacer(Modifier.width(12.dp))
-                Text(item.remaining.orEmpty(), fontSize = 12.sp, color = Dim)
+        // A film's name is short and goes large; a video's headline needs its two lines.
+        val long = item.title.length > 22
+        Text(
+            item.title, fontSize = if (long) 30.sp else 46.sp, fontWeight = FontWeight.ExtraBold, color = Foreground,
+            letterSpacing = (-0.03).em, lineHeight = if (long) 34.sp else 48.sp,
+            maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp, bottom = 9.dp),
+        )
+        // Left out when meta already says it all: a film's year, a video's channel and age.
+        val facts = item.meta.split(" · ").filter { it.isNotBlank() }
+        val subtitle = item.subtitle?.takeUnless { sub -> sub.split(" · ").all { it in facts } }
+        if (subtitle != null) {
+            Text(
+                subtitle, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Dim, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        // The score first, in its own colour; then the facts and how much is left.
+        val rating = facts.firstOrNull { it.startsWith("★") }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (fact in (listOfNotNull(rating) + (facts - setOfNotNull(rating)) + listOfNotNull(item.remaining)).take(5)) {
+                val score = fact == rating
+                Text(
+                    fact, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    color = if (score) Color(0xFF111111) else Foreground,
+                    modifier = Modifier.background(if (score) RatingYellow else Color.White.copy(alpha = 0.10f), ChipShape)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
             }
+        }
+        item.overview?.let {
+            Text(
+                it, fontSize = 13.sp, color = Dim, overflow = TextOverflow.Ellipsis, lineHeight = 19.sp,
+                // The hero's height is fixed: a two-line title with a subtitle leaves room for one line.
+                maxLines = if (long && subtitle != null) 1 else 2,
+                modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }
@@ -573,7 +617,7 @@ private fun ShelfRow(
     onConnectYouTube: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    Box(Modifier.height(168.dp).fillMaxWidth()) {
+    Box(Modifier.height(160.dp).fillMaxWidth()) {
         when (shelf) {
             is Shelf.Items -> MediaRow(shelf.items, showing, onFocusItem, onPlay)
             Shelf.ConnectJellyfin -> Box(Modifier.padding(start = Edge, top = 8.dp)) {
@@ -604,12 +648,13 @@ private fun ShelfRow(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class) // focusRestorer, LocalBringIntoViewSpec
 @Composable
 fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     var focusedId by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
     FollowShowing(list, items, showing, focusedId)
+    CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
     LazyRow(
         state = list,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -628,9 +673,10 @@ fun MediaRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaIte
             }
         }
     }
+    }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class) // focusRestorer, LocalBringIntoViewSpec
 @Composable
 private fun Dock(
     apps: List<TvApp>,
@@ -640,8 +686,9 @@ private fun Dock(
     onAllApps: () -> Unit,
 ) {
     var focusedPackage by remember { mutableStateOf<String?>(null) }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
     LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = Edge, vertical = 8.dp),
         modifier = Modifier.focusRestorer(firstFocus).onFocusChanged { if (!it.hasFocus) focusedPackage = null },
     ) {
@@ -658,14 +705,16 @@ private fun Dock(
         }
         item { AllAppsTile(onAllApps) }
     }
+    }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class) // focusRestorer, LocalBringIntoViewSpec
 @Composable
 private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: (MediaItem) -> Unit, onPlay: (MediaItem) -> Unit) {
     var focusedId by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
     FollowShowing(list, items, showing, focusedId)
+    CompositionLocalProvider(LocalBringIntoViewSpec provides ScrollOnlyWhenHidden) {
     LazyRow(
         state = list,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
@@ -683,6 +732,7 @@ private fun PosterRow(items: List<MediaItem>, showing: MediaItem?, onFocusItem: 
                 onPlay(item)
             }
         }
+    }
     }
 }
 
@@ -710,10 +760,10 @@ private fun FollowShowing(list: LazyListState, items: List<MediaItem>, showing: 
 @Composable
 fun RowTitle(title: String, note: String? = null) {
     Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
-        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Foreground)
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Foreground)
         if (note != null) {
-            Spacer(Modifier.width(6.dp))
-            Text(note, fontSize = 10.sp, color = Faint)
+            Spacer(Modifier.width(8.dp))
+            Text(note, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Faint)
         }
     }
 }
