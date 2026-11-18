@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Launcher: estilos para el inicio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@500;700;900&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=Inter+Tight:wght@400;500;600;700;800&family=Outfit:wght@200;300;400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* The images are real ones from the library and the feeds, kept out of the repo (.local/mockup-assets/,
+     gitignored). Without them every picture falls back to the flat colour underneath. */
+  :root { --fg: #f2f3f5; --dim: rgba(242,243,245,.64); --faint: rgba(242,243,245,.42); --bg: #07080b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #1b1d22; color: var(--fg); font-family: -apple-system, "Inter Tight", "Segoe UI", sans-serif; }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; flex-wrap: wrap; }
+  .chrome h1 { font-size: 15px; font-weight: 600; margin: 0 10px 0 0; }
+  .tab { background: #2a2d34; color: var(--fg); border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--fg); color: #111; }
+  .wrap { display: flex; gap: 20px; padding: 0 20px 20px; align-items: flex-start; }
+  .viewport { flex: 1; position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; }
+  .notes { width: 330px; flex: none; font-size: 14px; line-height: 1.5; color: var(--dim); }
+  .notes h2 { color: var(--fg); font-size: 15px; margin: 4px 0 8px; }
+  .notes ul { padding-left: 18px; margin: 0 0 14px; }
+  .notes b { color: var(--fg); font-weight: 600; }
+  body.solo { background: #000; }
+  body.solo .chrome, body.solo .notes { display: none; }
+  body.solo .wrap { padding: 0; }
+  body.solo .viewport { border-radius: 0; }
+
+  /* The stage is the TV in dp: 960 × 540 (1920 × 1080 px at density 2), like the launcher's Compose code. */
+  .stage { position: absolute; left: 0; top: 0; width: 960px; height: 540px; transform-origin: 0 0; overflow: hidden; display: none; }
+  .stage.on { display: block; }
+  .abs { position: absolute; }
+  .img { background-size: cover; background-position: center; background-color: #23262d; }
+  .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row { display: flex; }
+
+  /* App tiles, shared: brand colour and a wordmark. */
+  .app { display: grid; place-items: center; font-weight: 800; letter-spacing: -.01em; flex: none; }
+  .app.yt { background: #fff; color: #111; } .app.yt i { color: #f00; font-style: normal; }
+  .app.wh { background: #0b1030; color: #dfe3ff; }
+  .app.pv { background: #1a62f2; color: #fff; }
+  .app.dp { background: linear-gradient(160deg, #0a2a5e, #0b6a78); color: #fff; }
+  .app.mx { background: #1a0d4a; color: #fff; }
+  .app.sp { background: #121212; color: #1ed760; }
+  .app.all { background: rgba(255,255,255,.1); color: var(--fg); font-weight: 600; }
+
+  /* ───────────── Hoy ───────────── */
+  #s-hoy .img { position: absolute; inset: 0; }
+
+  /* ───────────── A · Cine ───────────── */
+  .A { background: #08090c; font-family: "Inter Tight", sans-serif; }
+  .A .art { right: 0; top: 0; width: 640px; height: 360px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 42%), linear-gradient(180deg, #000 55%, transparent);
+    -webkit-mask-composite: source-in; mask-composite: intersect; }
+  .A .top { right: 48px; top: 26px; display: flex; gap: 14px; align-items: baseline; font-size: 13px; color: var(--dim); }
+  .A .top b { font-size: 21px; font-weight: 600; color: var(--fg); letter-spacing: -.01em; }
+  .A .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; color: var(--dim); display: flex; gap: 7px; align-items: center; }
+  .A .eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--acc, #a97bff); }
+  .A h2 { font-size: 46px; font-weight: 800; letter-spacing: -.035em; line-height: 1; margin: 8px 0 10px; }
+  .A .meta { display: flex; gap: 6px; font-size: 11.5px; font-weight: 600; }
+  .A .meta span { padding: 3px 8px; border-radius: 5px; background: rgba(255,255,255,.1); }
+  .A .meta .star { background: #f2c94c; color: #111; }
+  .A .syn { font-size: 13px; line-height: 1.45; color: var(--dim); margin-top: 10px; width: 400px; }
+  .A .rowtitle { font-size: 14px; font-weight: 700; margin-bottom: 9px; display: flex; gap: 8px; align-items: baseline; }
+  .A .rowtitle small { font-size: 11px; font-weight: 500; color: var(--faint); }
+  .A .card { width: 168px; flex: none; }
+  .A .card .img { height: 94px; border-radius: 8px; position: relative; overflow: hidden; }
+  .A .card .bar { position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.3); }
+  .A .card .bar i { display: block; height: 100%; border-radius: 2px; background: #fff; }
+  .A .card p { margin: 7px 0 0; font-size: 12px; font-weight: 600; color: var(--dim); }
+  .A .card small { font-size: 10.5px; color: var(--faint); }
+  .A .card.f .img { outline: 2.5px solid #fff; outline-offset: 3px; }
+  .A .card.f p { color: var(--fg); font-size: 13px; }
+  .A .app { width: 116px; height: 65px; border-radius: 9px; font-size: 14px; }
+  .A .badge { position: absolute; left: 6px; top: 6px; font-size: 9px; font-weight: 800; padding: 2px 5px; border-radius: 3px; background: #000; color: #fff; }
+  .A .preview { right: 48px; top: 70px; width: 400px; height: 225px; border-radius: 12px; box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
+
+  /* ───────────── B · Calma ───────────── */
+  .B { font-family: "Outfit", sans-serif;
+    background: radial-gradient(90% 80% at 30% 105%, #c2552f 0%, #6b2c4f 34%, #1b1b3c 62%, #090a17 100%); }
+  .B .hello { left: 56px; top: 44px; }
+  .B .hello small { font-size: 12px; letter-spacing: .28em; font-weight: 500; color: rgba(255,255,255,.75); }
+  .B .hello .time { font-size: 92px; font-weight: 200; letter-spacing: -.03em; line-height: 1; margin-top: 6px; }
+  .B .hello .date { font-size: 15px; letter-spacing: .16em; font-weight: 400; color: rgba(255,255,255,.8); margin-top: 8px; }
+  .B .pills { right: 56px; top: 50px; display: flex; gap: 8px; }
+  .B .pill { padding: 8px 14px; border-radius: 99px; font-size: 12.5px; font-weight: 500;
+    background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+  .B .next { left: 56px; bottom: 196px; display: flex; gap: 12px; align-items: center; padding: 8px 16px 8px 8px; border-radius: 14px;
+    background: rgba(10,10,20,.42); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .B .next .img { width: 96px; height: 54px; border-radius: 8px; }
+  .B .next b { font-size: 14px; font-weight: 500; display: block; }
+  .B .next small { font-size: 11.5px; color: rgba(255,255,255,.7); }
+  .B .label { left: 56px; bottom: 150px; font-size: 26px; font-weight: 400; letter-spacing: -.01em; }
+  .B .dock { left: 44px; bottom: 44px; display: flex; gap: 12px; padding: 12px; border-radius: 22px;
+    background: rgba(10,10,20,.36); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  .B .app { width: 134px; height: 75px; border-radius: 13px; font-size: 16px; font-family: "Inter Tight", sans-serif; }
+  .B .app.f { outline: 3px solid #fff; outline-offset: 3px; }
+  .B .more { left: 0; right: 0; bottom: 14px; text-align: center; font-size: 11px; letter-spacing: .2em; color: rgba(255,255,255,.55); }
+
+  /* ───────────── C · Tablero ───────────── */
+  .C { background: #0b0c10; font-family: "Plus Jakarta Sans", sans-serif; }
+  .C .grid { left: 40px; top: 34px; width: 880px; height: 390px; display: grid; gap: 10px;
+    grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(3, 1fr); }
+  .C .t { border-radius: 16px; background: #16181e; position: relative; overflow: hidden; padding: 14px; }
+  .C .t .img { position: absolute; inset: 0; }
+  .C .t .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.05) 35%, rgba(0,0,0,.86)); }
+  .C .t .in { position: absolute; left: 14px; right: 14px; bottom: 12px; }
+  .C .k { font-size: 9.5px; font-weight: 800; letter-spacing: .14em; color: var(--kc, #fff); }
+  .C .t b { display: block; font-size: 14px; font-weight: 700; line-height: 1.25; margin-top: 3px; }
+  .C .t small { font-size: 11px; color: var(--dim); }
+  .C .big { grid-column: span 3; grid-row: span 3; }
+  .C .big b { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; }
+  .C .big .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); margin-top: 10px; }
+  .C .big .bar i { display: block; width: 62%; height: 100%; border-radius: 2px; background: #fff; }
+  .C .big.f { outline: 3px solid #fff; outline-offset: 3px; }
+  .C .clock { grid-column: span 1; background: #e9ff70; color: #10120a; }
+  .C .clock .h { font-size: 34px; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+  .C .clock small { color: rgba(16,18,10,.7); font-weight: 600; }
+  .C .wx { grid-column: span 2; background: linear-gradient(140deg, #2a63d6, #58a6f0); }
+  .C .wx .deg { font-size: 34px; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+  .C .wx small { color: rgba(255,255,255,.85); }
+  .C .wx .days { position: absolute; right: 14px; top: 14px; bottom: 12px; display: flex; gap: 12px; align-items: flex-end; font-size: 10.5px; text-align: center; font-weight: 600; }
+  .C .wx .days b { font-size: 13px; margin: 0; }
+  .C .news { grid-column: span 2; }
+  .C .yt2 { grid-column: span 1; }
+  /* Thumbnails carry their own lettering: the caption gets a plain strip under them, not a gradient over them. */
+  .C .news .img, .C .yt2 .img { bottom: 46px; }
+  .C .news .shade, .C .yt2 .shade { display: none; }
+  .C .news .in, .C .yt2 .in { bottom: 9px; }
+  .C .posters { grid-column: span 3; display: flex; gap: 8px; padding: 12px 14px; align-items: flex-end; }
+  .C .posters .txt { width: 92px; flex: none; align-self: flex-start; }
+  .C .posters .img { position: static; width: 62px; height: 93px; border-radius: 7px; flex: none; }
+  .C .apps { left: 40px; top: 440px; display: flex; gap: 10px; }
+  .C .app { width: 138px; height: 62px; border-radius: 14px; font-size: 14px; }
+
+  /* ───────────── D · Marquesina ───────────── */
+  .D { background: #0c0906; font-family: "Inter Tight", sans-serif; --gold: #e2b76a; }
+  .D .art { inset: 0; filter: sepia(.5) saturate(.85) brightness(.8); }
+  .D .veil { inset: 0; background: linear-gradient(90deg, #0c0906 18%, rgba(12,9,6,.6) 50%, rgba(12,9,6,.15)), linear-gradient(180deg, transparent 35%, #0c0906 88%); }
+  .D .mast { left: 48px; right: 48px; top: 26px; display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 10px; border-bottom: 1px solid rgba(226,183,106,.35); }
+  .D .mast .w { font-size: 12px; letter-spacing: .42em; font-weight: 600; color: var(--gold); }
+  .D .mast .r { font-family: "Fraunces", serif; font-size: 17px; color: var(--fg); }
+  .D .mast .r small { font-family: "Inter Tight", sans-serif; font-size: 11.5px; color: var(--dim); margin-right: 12px; letter-spacing: .04em; }
+  .D .info { left: 48px; top: 84px; width: 380px; }
+  .D .k { font-size: 10px; letter-spacing: .3em; font-weight: 600; color: var(--gold); }
+  .D h2 { font-family: "Fraunces", serif; font-weight: 600; font-size: 52px; letter-spacing: -.02em; line-height: .98; margin: 10px 0 12px; }
+  .D h2 i { font-weight: 400; }
+  .D .meta { font-size: 12px; letter-spacing: .08em; color: var(--dim); }
+  .D .meta b { color: var(--gold); font-weight: 600; }
+  .D .syn { font-family: "Fraunces", serif; font-size: 14px; line-height: 1.5; color: rgba(242,243,245,.78); margin-top: 12px; }
+  .D .reel { left: 48px; top: 300px; display: flex; gap: 14px; align-items: flex-end; }
+  .D .reel .img { width: 104px; height: 156px; border-radius: 4px; flex: none; opacity: .62; }
+  .D .reel .img.f { width: 124px; height: 186px; opacity: 1; outline: 2px solid var(--gold); outline-offset: 4px; }
+  .D .label { left: 48px; top: 276px; font-size: 10px; letter-spacing: .3em; font-weight: 600; color: var(--dim); }
+  .D .tabs { left: 48px; right: 48px; bottom: 16px; display: flex; gap: 22px; font-size: 11px; letter-spacing: .22em; font-weight: 600; color: var(--faint); }
+
+  /* ───────────── E · Tipográfico ───────────── */
+  .E { background: #000; font-family: "Space Mono", monospace; --red: #ff3b30; }
+  .E .clock { left: 48px; top: 34px; font-family: "Doto", monospace; font-weight: 900; font-size: 74px; line-height: 1; letter-spacing: .02em; }
+  .E .sub { left: 50px; top: 116px; font-size: 11px; letter-spacing: .12em; color: var(--dim); }
+  .E .sub i { color: var(--red); font-style: normal; }
+  .E .menu { left: 48px; top: 160px; width: 290px; font-size: 17px; font-weight: 700; letter-spacing: .02em; }
+  .E .menu div { padding: 4px 10px; display: flex; justify-content: space-between; align-items: baseline; color: var(--dim); }
+  .E .menu div small { font-size: 10.5px; font-weight: 400; color: var(--faint); }
+  .E .menu .f { background: #fff; color: #000; }
+  .E .menu .f small { color: rgba(0,0,0,.6); }
+  .E .rule { left: 372px; top: 34px; bottom: 34px; width: 1px; background: rgba(255,255,255,.18); }
+  .E .pane { left: 400px; top: 34px; right: 48px; }
+  .E .pane .k { font-size: 11px; letter-spacing: .12em; color: var(--dim); display: flex; justify-content: space-between; }
+  .E .pane .k i { color: var(--red); font-style: normal; }
+  .E .lead { margin-top: 12px; height: 232px; position: relative; filter: grayscale(1) contrast(1.1); }
+  .E .lead.col { filter: none; }
+  .E .lt { margin-top: 12px; font-size: 20px; font-weight: 700; line-height: 1.2; }
+  .E .lm { font-size: 11px; color: var(--dim); margin-top: 4px; letter-spacing: .04em; }
+  .E .list { margin-top: 14px; border-top: 1px solid rgba(255,255,255,.18); }
+  .E .list div { display: flex; gap: 12px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 12px; color: var(--dim); }
+  .E .list div span:first-child { color: var(--faint); width: 22px; }
+  .E .list div span:last-child { margin-left: auto; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <h1>Estilos para el inicio</h1>
+  <button class="tab" data-s="hoy">Hoy</button>
+  <button class="tab" data-s="a">A · Cine</button>
+  <button class="tab" data-s="a2">A · Cine (en Noticias)</button>
+  <button class="tab" data-s="b">B · Calma</button>
+  <button class="tab" data-s="c">C · Tablero</button>
+  <button class="tab" data-s="d">D · Marquesina</button>
+  <button class="tab" data-s="e">E · Tipográfico</button>
+</div>
+<div class="wrap">
+  <div class="viewport" id="viewport">
+
+    <div class="stage" id="s-hoy"><div class="img" data-i="now2"></div></div>
+
+    <!-- A · Cine: the art sits to the right behind a mask, the text always on solid colour. -->
+    <div class="stage A" id="s-a">
+      <div class="abs art img" data-i="bd-firstman"></div>
+      <div class="abs top"><span>☀ 21° Sídney</span><b>20:58</b></div>
+      <div class="abs" style="left:48px; top:62px">
+        <div class="eyebrow">SEGUIR VIENDO · JELLYFIN</div>
+        <h2>First Man</h2>
+        <div class="meta"><span class="star">★ 7,3</span><span>2018</span><span>Drama</span><span>Quedan 38 min</span></div>
+        <div class="syn">La historia de Neil Armstrong y de la década que llevó a la misión Apolo 11, contada desde adentro de la cápsula.</div>
+      </div>
+      <div class="abs" style="left:48px; top:262px">
+        <div class="rowtitle">Seguir viendo <small>Jellyfin</small></div>
+        <div class="row" style="gap:14px">
+          <div class="card f"><div class="img" data-i="bd-firstman"><div class="bar"><i style="width:72%"></i></div></div><p class="ell">First Man</p><small>Quedan 38 min</small></div>
+          <div class="card"><div class="img" data-i="bd-boy"><div class="bar"><i style="width:30%"></i></div></div><p class="ell">Boy Swallows Universe</p><small>T1 · E4</small></div>
+          <div class="card"><div class="img" data-i="bd-afteryang"><div class="bar"><i style="width:55%"></i></div></div><p class="ell">After Yang</p><small>Quedan 41 min</small></div>
+          <div class="card"><div class="img" data-i="bd-ghost"><div class="bar"><i style="width:12%"></i></div></div><p class="ell">A Ghost Story</p><small>Quedan 1 h 20</small></div>
+          <div class="card"><div class="img" data-i="bd-karate"></div><p class="ell">Karate Kid: Leyendas</p><small>Sin empezar</small></div>
+        </div>
+      </div>
+      <div class="abs row" style="left:48px; top:434px; gap:12px">
+        <div class="app yt"><span><i>▶</i> YouTube</span></div><div class="app wh">Wholphin</div><div class="app pv">prime video</div>
+        <div class="app dp">Disney+</div><div class="app mx">max</div><div class="app sp">Spotify</div><div class="app all">Todas las apps</div>
+      </div>
+      <div class="abs rowtitle" style="left:48px; top:516px; opacity:.6">Noticias <small>7NEWS · 9News · 10 News · ABC · SBS</small></div>
+    </div>
+
+    <!-- A, focus on a news video: the thumbnail is a framed preview, never the whole background. -->
+    <div class="stage A" id="s-a2" style="background: radial-gradient(70% 90% at 82% 20%, #3a1722, #08090c 70%)">
+      <div class="abs top"><span>☀ 21° Sídney</span><b>20:58</b></div>
+      <div class="abs preview img" data-i="n-abc"></div>
+      <div class="abs" style="left:48px; top:84px; width:400px; --acc:#ff5a4f">
+        <div class="eyebrow" style="--acc:#ff5a4f">ABC NEWS · HACE 57 MIN</div>
+        <h2 style="font-size:34px; line-height:1.08; letter-spacing:-.025em">Can the government stop jobs going offshore?</h2>
+        <div class="syn" style="width:380px">Another day, another Australian company moving jobs offshore. ABC Business Daily.</div>
+      </div>
+      <div class="abs" style="left:48px; top:322px">
+        <div class="rowtitle">Noticias <small>7NEWS · 9News · 10 News · ABC · SBS</small></div>
+        <div class="row" style="gap:14px">
+          <div class="card f"><div class="img" data-i="n-abc"><span class="badge">ABC</span></div><p class="ell">Can the government stop jobs going…</p><small>hace 57 min</small></div>
+          <div class="card"><div class="img" data-i="n-nine"><span class="badge">9News</span></div><p class="ell">Sydney News: Sunday bulletin</p><small>hace 1 h</small></div>
+          <div class="card"><div class="img" data-i="n-ten"><span class="badge">10 News</span></div><p class="ell">10 News+ full episode</p><small>hace 1 h</small></div>
+          <div class="card"><div class="img" data-i="n-seven"><span class="badge">7NEWS</span></div><p class="ell">History made over the Pacific</p><small>hace 2 h</small></div>
+          <div class="card"><div class="img" data-i="n-sbs"><span class="badge">SBS</span></div><p class="ell">US midterms: the cost of fear</p><small>hace 3 h</small></div>
+        </div>
+      </div>
+      <div class="abs rowtitle" style="left:48px; top:498px; opacity:.6">Agregado recientemente <small>Jellyfin</small></div>
+    </div>
+
+    <!-- B · Calma: clock and dock; the content waits one press down. -->
+    <div class="stage B" id="s-b">
+      <div class="abs hello"><small>BUENAS NOCHES</small><div class="time">20:58</div><div class="date">MIÉRCOLES 18 DE NOVIEMBRE · ☀ 21° SÍDNEY</div></div>
+      <div class="abs pills"><span class="pill">🎮 PlayStation 5</span><span class="pill">Entradas</span><span class="pill">⚙ Ajustes</span></div>
+      <div class="abs next"><div class="img" data-i="bd-firstman"></div><div><b>Seguir con First Man</b><small>Quedan 38 min · Jellyfin</small></div></div>
+      <div class="abs label">Wholphin</div>
+      <div class="abs dock">
+        <div class="app yt"><span><i>▶</i> YouTube</span></div><div class="app wh f">Wholphin</div><div class="app pv">prime video</div>
+        <div class="app dp">Disney+</div><div class="app mx">max</div><div class="app sp">Spotify</div>
+      </div>
+      <div class="abs more">▾ SEGUIR VIENDO · NOTICIAS · YOUTUBE</div>
+    </div>
+
+    <!-- C · Tablero: one screen of tiles, each a summary of a row. -->
+    <div class="stage C" id="s-c">
+      <div class="abs grid">
+        <div class="t big f"><div class="img" data-i="bd-firstman"></div><div class="shade"></div>
+          <div class="in"><span class="k" style="--kc:#c9a8ff">SEGUIR VIENDO</span><b>First Man</b><small>Quedan 38 min · Jellyfin</small><div class="bar"><i></i></div></div></div>
+        <div class="t clock"><span class="k" style="--kc:#10120a">MIÉ 18 NOV</span><div class="in"><div class="h">20:58</div><small>Sídney</small></div></div>
+        <div class="t wx"><span class="k">CLIMA</span><div class="in"><div class="deg">21°</div><small>Despejado · máx. 26°</small></div>
+          <div class="days"><div>JUE<br><b>24°</b></div><div>VIE<br><b>27°</b></div><div>SÁB<br><b>19°</b></div></div></div>
+        <div class="t news"><div class="img" data-i="n-abc"></div><div class="shade"></div>
+          <div class="in"><span class="k" style="--kc:#ff8178">NOTICIAS · ABC · HACE 57 MIN</span><b class="ell">Can the government stop jobs going offshore?</b></div></div>
+        <div class="t yt2"><div class="img" data-i="y-notif"></div><div class="shade"></div>
+          <div class="in"><span class="k" style="--kc:#ff6b6b">YOUTUBE · 15</span><b class="ell">Y QUÉ?</b></div></div>
+        <div class="t posters"><div class="txt"><span class="k" style="--kc:#7fe0b0">AGREGADO</span><b>12 películas nuevas</b><small>esta semana</small></div>
+          <div class="img" data-i="p-othermommy"></div><div class="img" data-i="p-lodejamos"></div><div class="img" data-i="p-hope"></div><div class="img" data-i="p-odyssey"></div><div class="img" data-i="p-anniv"></div></div>
+      </div>
+      <div class="abs apps">
+        <div class="app yt"><span><i>▶</i> YouTube</span></div><div class="app wh">Wholphin</div><div class="app pv">prime video</div>
+        <div class="app dp">Disney+</div><div class="app mx">max</div><div class="app all">Todas las apps</div>
+      </div>
+    </div>
+
+    <!-- D · Marquesina: the library as a cinema programme. -->
+    <div class="stage D" id="s-d">
+      <div class="abs art img" data-i="bd-ghost"></div><div class="abs veil"></div>
+      <div class="abs mast"><span class="w">H▶ &nbsp;HOLLYWOOD</span><span class="r"><small>☀ 21° SÍDNEY</small>20:58</span></div>
+      <div class="abs info">
+        <div class="k">ESTA NOCHE · SIN VER</div>
+        <h2>A Ghost <i>Story</i></h2>
+        <div class="meta"><b>★ 6,8</b> &nbsp;·&nbsp; 2017 &nbsp;·&nbsp; DRAMA &nbsp;·&nbsp; 1 H 32</div>
+        <div class="syn">Un fantasma de sábana blanca vuelve a su casa para acompañar a su mujer, y descubre que el tiempo ya no lo espera.</div>
+      </div>
+      <div class="abs label">AGREGADO RECIENTEMENTE</div>
+      <div class="abs reel">
+        <div class="img f" data-i="p-ghost"></div><div class="img" data-i="p-othermommy"></div><div class="img" data-i="p-lodejamos"></div>
+        <div class="img" data-i="p-hope"></div><div class="img" data-i="p-odyssey"></div><div class="img" data-i="p-anniv"></div>
+        <div class="img" data-i="p-historia"></div><div class="img" data-i="p-cashback"></div>
+      </div>
+      <div class="abs tabs"><span style="color:var(--gold)">CARTELERA</span><span>SEGUIR VIENDO</span><span>YOUTUBE</span><span>NOTICIAS</span><span>APPS</span><span>TELE</span></div>
+    </div>
+
+    <!-- E · Tipográfico: a text menu; pictures only for what is selected. -->
+    <div class="stage E" id="s-e">
+      <div class="abs clock">20:58</div>
+      <div class="abs sub">MIÉ 18 NOV <i>●</i> 21° SÍDNEY, DESPEJADO</div>
+      <div class="abs menu">
+        <div>SEGUIR VIENDO <small>5</small></div><div class="f">NOTICIAS <small>20</small></div><div>YOUTUBE <small>15</small></div>
+        <div>CARTELERA <small>40</small></div><div>WHOLPHIN</div><div>PRIME VIDEO</div><div>DISNEY+</div><div>MAX</div><div>PS5 <small>HDMI 2</small></div><div>TODAS LAS APPS</div>
+      </div>
+      <div class="abs rule"></div>
+      <div class="abs pane">
+        <div class="k"><span>NOTICIAS / 01 DE 20</span><span><i>●</i> ABC NEWS</span></div>
+        <div class="lead img col" data-i="n-abc"></div>
+        <div class="lt">Can the government stop jobs going offshore?</div>
+        <div class="lm">ABC BUSINESS DAILY · HACE 57 MIN</div>
+        <div class="list">
+          <div><span>02</span><span class="ell">Sydney News: Sunday bulletin</span><span>9NEWS · 1 H</span></div>
+          <div><span>03</span><span class="ell">10 News+ full episode</span><span>10 NEWS · 1 H</span></div>
+          <div><span>04</span><span class="ell">History made over the Pacific</span><span>7NEWS · 2 H</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+const NOTES = {
+  hoy: `<h2>Hoy</h2><ul>
+    <li>El fondo es la imagen de lo enfocado, a pantalla completa. Con una miniatura de YouTube o de noticias queda un cartel gigante detrás de las filas.</li>
+    <li>El título y el resumen viven arriba a la izquierda, sobre esa imagen: a veces no se leen.</li>
+    <li>Tipografía del sistema, sin color propio, fichas de apps grises.</li></ul>`,
+  a: `<h2>A · Cine</h2><ul>
+    <li><b>Referencias:</b> Apple TV, Plex nuevo, Kodi Arctic Fuse.</li>
+    <li>La imagen va a la derecha, detrás de una máscara fija. El texto siempre queda sobre color liso.</li>
+    <li>Datos en pastillas (puntaje, año, género, lo que falta) y resumen de dos líneas.</li>
+    <li>Misma estructura de filas que hoy: es el cambio más chico.</li>
+    <li><b>Costo en la tele:</b> igual que hoy. La máscara es una capa guardada.</li></ul>`,
+  a2: `<h2>A · Cine, en Noticias</h2><ul>
+    <li>Las miniaturas de YouTube y noticias ya no son el fondo: van en un recuadro, a su tamaño real.</li>
+    <li>El fondo toma un tinte suave del color de la miniatura, sin la imagen.</li>
+    <li>El titular completo se lee a la izquierda.</li></ul>`,
+  b: `<h2>B · Calma</h2><ul>
+    <li><b>Referencias:</b> la tendencia «TV limpiada con Claude» (Clean Your TV, Claude-TV, fire-tv-cleanup) y tvOS.</li>
+    <li>Reloj grande, saludo, clima y un dock de apps. El fondo cambia con la hora del día.</li>
+    <li>Una sola sugerencia: lo que estabas viendo. El resto aparece al bajar.</li>
+    <li>Lo más distinto a hoy: el contenido deja de ser lo primero.</li>
+    <li><b>Costo en la tele:</b> el más bajo. Un degradado fijo, sin imágenes.</li></ul>`,
+  c: `<h2>C · Tablero</h2><ul>
+    <li><b>Referencias:</b> Xbox, Fire TV 2026, widgets de iPad.</li>
+    <li>Una pantalla sin desplazamiento: cada ficha resume una fila (seguir viendo, noticias, YouTube, agregado, clima).</li>
+    <li>OK en una ficha abre lo primero; mantener apretado (o derecha) abre la fila entera.</li>
+    <li>Fondo liso, color solo en las fichas.</li>
+    <li><b>Costo en la tele:</b> bajo. Hay que rehacer la navegación.</li></ul>`,
+  d: `<h2>D · Marquesina</h2><ul>
+    <li><b>Referencias:</b> Kodi Aeon Nox, MUBI, Criterion Channel, programas de cine.</li>
+    <li>Identidad propia de «Hollywood»: negro cálido, dorado, títulos con serif, pósters como protagonistas.</li>
+    <li>Las secciones son pestañas abajo, en vez de filas apiladas.</li>
+    <li>El fondo va en sepia y oscuro, así ninguna imagen compite con el texto.</li>
+    <li><b>Costo en la tele:</b> igual que hoy. El sepia se aplica una vez al cargar la imagen.</li></ul>`,
+  e: `<h2>E · Tipográfico</h2><ul>
+    <li><b>Referencias:</b> Nothing OS, teletexto, launchers minimalistas.</li>
+    <li>Menú de texto a la izquierda; a la derecha, lo seleccionado con una sola imagen y una lista.</li>
+    <li>Negro puro, blanco y un punto rojo. Reloj en matriz de puntos.</li>
+    <li>El más rápido de navegar y el menos «vidriera».</li>
+    <li><b>Costo en la tele:</b> el más bajo junto con B.</li></ul>`,
+};
+const ASSETS = '../../.local/mockup-assets/';
+document.querySelectorAll('[data-i]').forEach(el => { el.style.backgroundImage = `url(${ASSETS}${el.dataset.i}.jpg)`; });
+
+const viewport = document.getElementById('viewport');
+function fit() {
+  const scale = viewport.clientWidth / 960;
+  document.querySelectorAll('.stage').forEach(s => { s.style.transform = `scale(${scale})`; });
+}
+function show(id) {
+  document.querySelectorAll('.stage').forEach(s => s.classList.toggle('on', s.id === 's-' + id));
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.s === id));
+  document.getElementById('notes').innerHTML = NOTES[id] || '';
+  history.replaceState(null, '', '#' + id);
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.s)));
+// ?solo in the URL: only the stage, for screenshots at the TV's size.
+if (location.search.includes('solo')) document.body.classList.add('solo');
+addEventListener('resize', fit);
+show((location.hash || '#a').slice(1));
+fit();
+</script>
+</body>
+</html>
